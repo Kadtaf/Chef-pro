@@ -1,0 +1,11 @@
+# robots.txt for Chef Pro Bordeaux
+User-agent: *
+Allow: /
+Disallow: /admin/
+Disallow: /login
+
+# Sitemap
+Sitemap: https://chef-pro-bordeaux.fr/sitemap.xml
+
+# Crawl-delay
+Crawl-delay: 1
