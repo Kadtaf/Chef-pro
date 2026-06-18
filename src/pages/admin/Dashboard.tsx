@@ -9,11 +9,7 @@ import {
   Euro,
   MessageSquare,
   TrendingUp,
-  TrendingDown,
-  Clock,
-  Star,
-  ArrowUp,
-  ArrowDown,
+  Clock
 } from 'lucide-react';
 import { formatCurrency, formatDate } from '../../lib/utils';
 import {
