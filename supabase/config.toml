@@ -1,0 +1,5 @@
+[functions.ai-generate]
+verify_jwt = false
+
+[functions.ai-generate-image]
+verify_jwt = false

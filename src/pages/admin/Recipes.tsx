@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { supabase, Tables } from '../../lib/supabase';
 import { Plus, Search, Edit, Trash2, Eye, EyeOff, Star } from 'lucide-react';
-import { formatCurrency, formatDate, getNutriScoreClass } from '../../lib/utils';
+import { getNutriScoreClass } from '../../lib/utils';
 
 export default function Recipes() {
   const [recipes, setRecipes] = useState<Tables<'recipes'>[]>([]);
