@@ -53,9 +53,12 @@ export interface GeneratedMenu {
     slug: string;
     description: string;
     season: string;
+    image_url?: string;
     items: GeneratedMenuItem[];
     total_calories: number;
     is_balanced: boolean;
+    price?: number;
+    avg_nutri_score?: 'A' | 'B' | 'C' | 'D' | 'E';
 }
 
 export interface GeneratedTechnicalSheet {
@@ -96,6 +99,31 @@ export interface GeneratedTechnicalSheet {
     cooking_time: number;
 }
 
+export interface GeneratedCardItem {
+    title: string;
+    description: string;
+    price: number;
+    is_suggestion?: boolean;
+}
+
+export interface GeneratedCardSection {
+    title: string;
+    description?: string;
+    position: number;
+    items: GeneratedCardItem[];
+}
+
+export interface GeneratedCard {
+    title: string;
+    slug: string;
+    description: string;
+    category: 'restaurant' | 'traiteur' | 'evenement' | 'saisonniere';
+    season: 'printemps' | 'ete' | 'automne' | 'hiver' | 'all';
+    image_url?: string;
+    is_balanced: boolean;
+    sections: GeneratedCardSection[];
+}
+
 export interface GeneratedHACCP {
     title: string;
     zone: string;
@@ -133,6 +161,7 @@ async function callFunction(payload: unknown) {
     const { result } = await response.json();
     return result;
 }
+
 export async function generateDishImage(params: {
     title: string;
     description?: string;
@@ -150,8 +179,8 @@ export async function generateDishImage(params: {
         method: 'POST',
         headers: {
             'Content-Type': 'application/json',
-            'apikey': anonKey,
-            'Authorization': `Bearer ${anonKey}`,
+            apikey: anonKey,
+            Authorization: `Bearer ${anonKey}`,
         },
         body: JSON.stringify(params),
     });
@@ -237,6 +266,51 @@ export async function generateAndUploadTechnicalSheetImage(sheet: {
         bucket: 'ai-images',
         folder: 'technical-sheets',
         filenameBase: sheet.title,
+        contentType: generated.mimeType || 'image/png',
+    });
+
+    return uploaded.publicUrl;
+}
+
+export async function generateAndUploadMenuImage(menu: {
+    title: string;
+    description?: string;
+    season?: string;
+}) {
+    const generated = await generateDishImage({
+        title: menu.title,
+        description: `${menu.description || ''} ${menu.season ? `Menu de saison ${menu.season}.` : ''}`.trim(),
+        category: 'menu',
+    });
+
+    const uploaded = await uploadAiImageToStorage({
+        base64: generated.imageBase64,
+        bucket: 'ai-images',
+        folder: 'menus',
+        filenameBase: menu.title,
+        contentType: generated.mimeType || 'image/png',
+    });
+
+    return uploaded.publicUrl;
+}
+
+export async function generateAndUploadCardImage(card: {
+    title: string;
+    description?: string;
+    season?: string;
+    category?: string;
+}) {
+    const generated = await generateDishImage({
+        title: card.title,
+        description: `${card.description || ''} ${card.season ? `Carte de saison ${card.season}.` : ''}`.trim(),
+        category: card.category || 'carte',
+    });
+
+    const uploaded = await uploadAiImageToStorage({
+        base64: generated.imageBase64,
+        bucket: 'ai-images',
+        folder: 'cards',
+        filenameBase: card.title,
         contentType: generated.mimeType || 'image/png',
     });
 
@@ -352,14 +426,74 @@ function ensureMenuDefaults(menu: Partial<GeneratedMenu>): GeneratedMenu {
             ? menu.total_calories
             : items.reduce((sum, item) => sum + (item.recipe?.calories_per_serving || 0), 0);
 
+    const avgNutriScore = menu.avg_nutri_score || (() => {
+        const scores = items
+            .map((item) => item.recipe?.nutri_score)
+            .filter(Boolean) as Array<'A' | 'B' | 'C' | 'D' | 'E'>;
+
+        if (!scores.length) return 'B';
+
+        const order: Record<'A' | 'B' | 'C' | 'D' | 'E', number> = {
+            A: 1,
+            B: 2,
+            C: 3,
+            D: 4,
+            E: 5,
+        };
+
+        const reverse: Record<number, 'A' | 'B' | 'C' | 'D' | 'E'> = {
+            1: 'A',
+            2: 'B',
+            3: 'C',
+            4: 'D',
+            5: 'E',
+        };
+
+        const avg = Math.round(scores.reduce((sum, score) => sum + order[score], 0) / scores.length);
+        return reverse[Math.min(5, Math.max(1, avg))];
+    })();
+
     return {
         title: menu.title || `Menu ${season}`,
         slug: slugify(menu.title || `Menu ${season}`),
         description: menu.description || '',
         season,
+        image_url: menu.image_url || '',
         items,
         total_calories: totalCalories,
         is_balanced: menu.is_balanced ?? items.length >= 3,
+        price: typeof menu.price === 'number' ? menu.price : 0,
+        avg_nutri_score: avgNutriScore,
+    };
+}
+
+function ensureCardDefaults(card: Partial<GeneratedCard>): GeneratedCard {
+    const season = (card.season || getSeasonFromDate()) as GeneratedCard['season'];
+    const rawSections = Array.isArray(card.sections) ? card.sections : [];
+
+    const sections = rawSections.map((section, sectionIndex) => ({
+        title: section.title || `Section ${sectionIndex + 1}`,
+        description: section.description || '',
+        position: section.position || sectionIndex + 1,
+        items: Array.isArray(section.items)
+            ? section.items.map((item, itemIndex) => ({
+                title: item.title || `Item ${itemIndex + 1}`,
+                description: item.description || '',
+                price: typeof item.price === 'number' ? item.price : 0,
+                is_suggestion: item.is_suggestion ?? false,
+            }))
+            : [],
+    }));
+
+    return {
+        title: card.title || `Carte ${season}`,
+        slug: slugify(card.title || `Carte ${season}`),
+        description: card.description || '',
+        category: card.category || 'saisonniere',
+        season,
+        image_url: card.image_url || '',
+        is_balanced: card.is_balanced ?? sections.length >= 3,
+        sections,
     };
 }
 
@@ -385,6 +519,14 @@ export async function generateMenu(
 ): Promise<GeneratedMenu> {
     const result = await callFunction({ type: 'menu', season, menu_type: type });
     return ensureMenuDefaults(result);
+}
+
+export async function generateCard(
+    season: string,
+    type: 'restaurant' | 'traiteur' | 'evenement' | 'saisonniere' = 'saisonniere',
+): Promise<GeneratedCard> {
+    const result = await callFunction({ type: 'card', season, menu_type: type });
+    return ensureCardDefaults(result);
 }
 
 export async function generateHACCPChecklist(zone: string): Promise<GeneratedHACCP> {

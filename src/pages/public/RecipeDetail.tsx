@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import { supabase, Tables } from '../../lib/supabase';
 import { Clock, Users, Flame, ChefHat, ArrowLeft, Printer } from 'lucide-react';
-import { formatDate, formatDuration, formatCurrency, getNutriScoreClass } from '../../lib/utils';
+import { formatDuration, formatCurrency, getNutriScoreClass } from '../../lib/utils';
 
 export default function RecipeDetail() {
   const { slug } = useParams();

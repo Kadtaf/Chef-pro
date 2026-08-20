@@ -4,6 +4,7 @@ import { supabase, Tables } from '../../lib/supabase';
 import { Clock, Users, Flame, Search, Filter, X } from 'lucide-react';
 
 export default function Recipes() {
+    console.log('PUBLIC Recipes component mounted');
   const [recipes, setRecipes] = useState<Tables<'recipes'>[]>([]);
   const [filteredRecipes, setFilteredRecipes] = useState<Tables<'recipes'>[]>([]);
   const [categories, setCategories] = useState<string[]>([]);
@@ -13,17 +14,26 @@ export default function Recipes() {
   const [showFilters, setShowFilters] = useState(false);
 
   useEffect(() => {
+      console.log('PUBLIC Recipes useEffect fired');
     const fetchRecipes = async () => {
-      const { data } = await supabase
+      const { data, error } = await supabase
         .from('recipes')
         .select('*')
         .eq('is_published', true)
         .order('created_at', { ascending: false });
+        console.log('PUBLIC RECIPES data:', data);
+        console.log('PUBLIC RECIPES error full:', error);
+        console.log('PUBLIC RECIPES count:', data?.length);
+        if (error) {
+            console.error('Erreur chargement recettes publiques:', error);
+            return;
+        }
       if (data) {
         setRecipes(data);
         setFilteredRecipes(data);
         const cats = [...new Set(data.map((r) => r.category))];
         setCategories(cats);
+
       }
     };
     fetchRecipes();

@@ -1,8 +1,7 @@
 import { useEffect, useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { supabase } from '../../lib/supabase';
-import { Tables } from '../../lib/supabase';
-import { slugify, calculateNutriScore, ALLERGENS, RECIPE_CATEGORIES, SEASONS, DIFFICULTY_LEVELS } from '../../lib/utils';
+import { slugify, calculateNutriScore, RECIPE_CATEGORIES, SEASONS, DIFFICULTY_LEVELS } from '../../lib/utils';
 import { Plus, Trash2, Save, ArrowLeft } from 'lucide-react';
 
 export default function RecipeEditor() {

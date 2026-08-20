@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { supabase, Tables } from '../../lib/supabase';
-import { Plus, Search, Edit, Trash2, Eye, EyeOff, CreditCard } from 'lucide-react';
+import { Plus, Search, Edit, Trash2, Eye, EyeOff, CreditCard, FileSearch } from 'lucide-react';
 
 export default function Cards() {
   const [cards, setCards] = useState<Tables<'cards'>[]>([]);
@@ -65,6 +65,13 @@ export default function Cards() {
                   <span className={`badge ${card.is_published ? 'badge-success' : 'bg-neutral-100 text-neutral-600'}`}>{card.is_published ? 'Publié' : 'Brouillon'}</span>
                   <div className="flex gap-1">
                     <button onClick={() => togglePublished(card)} className="p-2 rounded-lg hover:bg-neutral-100">{card.is_published ? <EyeOff className="w-4 h-4 text-neutral-400" /> : <Eye className="w-4 h-4 text-neutral-400" />}</button>
+                      <Link
+                          to={`/admin/cards/${card.id}`}
+                          className="p-2 rounded-lg hover:bg-neutral-100"
+                          title="Voir la fiche"
+                      >
+                          <FileSearch className="w-4 h-4 text-neutral-400" />
+                      </Link>
                     <Link to={`/admin/cards/${card.id}/edit`} className="p-2 rounded-lg hover:bg-neutral-100"><Edit className="w-4 h-4 text-neutral-400" /></Link>
                     <button onClick={() => deleteCard(card.id)} className="p-2 rounded-lg hover:bg-error-50"><Trash2 className="w-4 h-4 text-error-500" /></button>
                   </div>

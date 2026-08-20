@@ -26,10 +26,38 @@ import {
     AlertTriangle,
     Download,
     Image as ImageIcon,
+    LayoutTemplate,
 } from 'lucide-react';
 import { formatCurrency, slugify } from '../../lib/utils';
 
-type GenerationType = 'recipe' | 'technical_sheet' | 'menu' | 'haccp';
+type GenerationType = 'recipe' | 'technical_sheet' | 'menu' | 'card' | 'haccp';
+
+type CardCategory = 'restaurant' | 'traiteur' | 'evenement' | 'saisonniere';
+
+export interface GeneratedCardItem {
+    title: string;
+    description: string;
+    price: number;
+    is_suggestion?: boolean;
+}
+
+export interface GeneratedCardSection {
+    title: string;
+    description?: string;
+    position: number;
+    items: GeneratedCardItem[];
+}
+
+export interface GeneratedCard {
+    title: string;
+    slug: string;
+    description: string;
+    category: CardCategory;
+    season: 'printemps' | 'ete' | 'automne' | 'hiver' | 'all';
+    image_url?: string;
+    is_balanced: boolean;
+    sections: GeneratedCardSection[];
+}
 
 function normalizeMenuItemType(type?: string) {
     switch (type) {
@@ -64,6 +92,51 @@ async function imageUrlToDataUrl(url: string): Promise<string | null> {
     } catch {
         return null;
     }
+}
+
+async function invokeImagePrompt(prompt: string): Promise<string | null> {
+    const { data, error } = await supabase.functions.invoke('generate-image', {
+        body: { prompt },
+    });
+
+    if (error) throw error;
+    return data?.imageUrl ?? data?.publicUrl ?? null;
+}
+
+async function generateAndUploadMenuImage(params: {
+    title: string;
+    description: string;
+    season: string;
+}) {
+    const prompt = `Photo culinaire gastronomique premium d'un menu de restaurant français intitulé "${params.title}", saison ${params.season}, ambiance élégante, dressage raffiné, lumière naturelle, rendu réaliste, style éditorial haut de gamme. Description: ${params.description}`;
+    return invokeImagePrompt(prompt);
+}
+
+async function generateAndUploadCardImage(params: {
+    title: string;
+    description: string;
+    season: string;
+    category: string;
+}) {
+    const prompt = `Photo éditoriale premium représentant une carte de restaurant française ${params.category}, saison ${params.season}, intitulée "${params.title}", univers gastronomique élégant, plats de saison, ambiance raffinée, rendu réaliste. Description: ${params.description}`;
+    return invokeImagePrompt(prompt);
+}
+
+async function generateCard(
+    season: string,
+    cardCategory: CardCategory,
+): Promise<GeneratedCard> {
+    const { data, error } = await supabase.functions.invoke('ai-generate', {
+        body: {
+            type: 'card',
+            season,
+            menu_type: cardCategory,
+        },
+    });
+
+    if (error) throw error;
+    if (!data?.result) throw new Error('Aucune carte générée');
+    return data.result as GeneratedCard;
 }
 
 async function saveRecipeWithChildren(recipe: GeneratedRecipe) {
@@ -212,6 +285,9 @@ async function saveMenuWithRecipes(
             season: menu.season,
             total_calories: menu.total_calories,
             is_balanced: menu.is_balanced,
+            image_url: menu.image_url || null,
+            price: menu.price || 0,
+            avg_nutri_score: menu.avg_nutri_score || null,
             is_published: false,
         })
         .select('id')
@@ -252,9 +328,63 @@ async function saveMenuWithRecipes(
     return menuRow.id;
 }
 
+async function saveCardWithSections(card: GeneratedCard) {
+    const { data: cardRow, error: cardError } = await supabase
+        .from('cards')
+        .insert({
+            title: card.title,
+            slug: card.slug || slugify(card.title),
+            description: `${card.description}${card.season ? ` | Saison: ${card.season}` : ''}`,
+            category: card.category,
+            image_url: card.image_url || null,
+            is_published: false,
+            is_balanced: card.is_balanced,
+        })
+        .select('id')
+        .single();
+
+    if (cardError) throw cardError;
+
+    for (const section of card.sections) {
+        const { data: sectionRow, error: sectionError } = await supabase
+            .from('card_sections')
+            .insert({
+                card_id: cardRow.id,
+                title: section.title,
+                description: section.description || null,
+                position: section.position,
+            })
+            .select('id')
+            .single();
+
+        if (sectionError) throw sectionError;
+
+        if (section.items.length > 0) {
+            const { error: itemsError } = await supabase
+                .from('card_section_items')
+                .insert(
+                    section.items.map((item, index) => ({
+                        card_section_id: sectionRow.id,
+                        recipe_id: null,
+                        technical_sheet_id: null,
+                        custom_title: item.title,
+                        custom_description: item.description,
+                        price: item.price,
+                        position: index + 1,
+                        is_suggestion: item.is_suggestion ?? false,
+                    })),
+                );
+
+            if (itemsError) throw itemsError;
+        }
+    }
+
+    return cardRow.id;
+}
+
 async function exportPdf(
     type: GenerationType,
-    result: GeneratedRecipe | GeneratedTechnicalSheet | GeneratedMenu | GeneratedHACCP | null,
+    result: GeneratedRecipe | GeneratedTechnicalSheet | GeneratedMenu | GeneratedCard | GeneratedHACCP | null,
 ) {
     if (!result) return;
 
@@ -376,11 +506,21 @@ async function exportPdf(
     }
 
     if (type === 'menu') {
-        const menu = result as GeneratedMenu;
+        const menu = result as GeneratedMenu & { price?: number; avg_nutri_score?: string; image_url?: string };
         addTitle(menu.title);
         addParagraph(menu.description || 'Menu généré par l’IA');
+
+        if (menu.image_url) {
+            const imageData = await imageUrlToDataUrl(menu.image_url);
+            if (imageData) {
+                ensureSpace(220);
+                doc.addImage(imageData, 'JPEG', margin, y, contentWidth, 180);
+                y += 190;
+            }
+        }
+
         addParagraph(
-            `Saison: ${menu.season} | ${menu.is_balanced ? 'Menu équilibré' : 'Menu non équilibré'} | Total: ${menu.total_calories} kcal/personne`,
+            `Saison: ${menu.season} | ${menu.is_balanced ? 'Menu équilibré' : 'Menu non équilibré'} | Total: ${menu.total_calories} kcal/personne | Prix: ${formatCurrency(menu.price || 0)} | Nutri moyen: ${menu.avg_nutri_score || '-'}`,
         );
         addSection('Éléments du menu');
 
@@ -406,6 +546,38 @@ async function exportPdf(
         return;
     }
 
+    if (type === 'card') {
+        const card = result as GeneratedCard;
+        addTitle(card.title);
+        addParagraph(card.description || 'Carte générée par l’IA');
+
+        if (card.image_url) {
+            const imageData = await imageUrlToDataUrl(card.image_url);
+            if (imageData) {
+                ensureSpace(220);
+                doc.addImage(imageData, 'JPEG', margin, y, contentWidth, 180);
+                y += 190;
+            }
+        }
+
+        addParagraph(
+            `Catégorie: ${card.category} | Saison: ${card.season} | ${card.is_balanced ? 'Carte équilibrée' : 'Carte non équilibrée'}`,
+        );
+
+        card.sections.forEach((section) => {
+            addSection(section.title);
+            if (section.description) addParagraph(section.description);
+            addBulletLines(
+                section.items.map(
+                    (item) => `${item.title} — ${item.description} — ${formatCurrency(item.price)}${item.is_suggestion ? ' — Suggestion' : ''}`,
+                ),
+            );
+        });
+
+        doc.save(`${card.slug || 'carte'}.pdf`);
+        return;
+    }
+
     const checklist = result as GeneratedHACCP;
     addTitle(checklist.title);
     addParagraph(`Zone: ${checklist.zone}`);
@@ -427,38 +599,14 @@ function renderRecipePreview(recipe: GeneratedRecipe) {
     return (
         <div className="space-y-6">
             <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-                <div className="rounded-lg border border-neutral-200 bg-neutral-50 p-3">
-                    <p className="text-xs text-neutral-500">Catégorie</p>
-                    <p className="font-medium text-neutral-900">{recipe.category}</p>
-                </div>
-                <div className="rounded-lg border border-neutral-200 bg-neutral-50 p-3">
-                    <p className="text-xs text-neutral-500">Saison</p>
-                    <p className="font-medium text-neutral-900 capitalize">{recipe.season}</p>
-                </div>
-                <div className="rounded-lg border border-neutral-200 bg-neutral-50 p-3">
-                    <p className="text-xs text-neutral-500">Difficulté</p>
-                    <p className="font-medium text-neutral-900 capitalize">{recipe.difficulty}</p>
-                </div>
-                <div className="rounded-lg border border-neutral-200 bg-neutral-50 p-3">
-                    <p className="text-xs text-neutral-500">Portions</p>
-                    <p className="font-medium text-neutral-900">{recipe.servings}</p>
-                </div>
-                <div className="rounded-lg border border-neutral-200 bg-neutral-50 p-3">
-                    <p className="text-xs text-neutral-500">Préparation</p>
-                    <p className="font-medium text-neutral-900">{recipe.prep_time} min</p>
-                </div>
-                <div className="rounded-lg border border-neutral-200 bg-neutral-50 p-3">
-                    <p className="text-xs text-neutral-500">Cuisson</p>
-                    <p className="font-medium text-neutral-900">{recipe.cook_time} min</p>
-                </div>
-                <div className="rounded-lg border border-neutral-200 bg-neutral-50 p-3">
-                    <p className="text-xs text-neutral-500">Coût / portion</p>
-                    <p className="font-medium text-neutral-900">{formatCurrency(recipe.cost_per_serving)}</p>
-                </div>
-                <div className="rounded-lg border border-neutral-200 bg-neutral-50 p-3">
-                    <p className="text-xs text-neutral-500">Nutri-Score</p>
-                    <p className="font-medium text-neutral-900">{recipe.nutri_score}</p>
-                </div>
+                <div className="rounded-lg border border-neutral-200 bg-neutral-50 p-3"><p className="text-xs text-neutral-500">Catégorie</p><p className="font-medium text-neutral-900">{recipe.category}</p></div>
+                <div className="rounded-lg border border-neutral-200 bg-neutral-50 p-3"><p className="text-xs text-neutral-500">Saison</p><p className="font-medium text-neutral-900 capitalize">{recipe.season}</p></div>
+                <div className="rounded-lg border border-neutral-200 bg-neutral-50 p-3"><p className="text-xs text-neutral-500">Difficulté</p><p className="font-medium text-neutral-900 capitalize">{recipe.difficulty}</p></div>
+                <div className="rounded-lg border border-neutral-200 bg-neutral-50 p-3"><p className="text-xs text-neutral-500">Portions</p><p className="font-medium text-neutral-900">{recipe.servings}</p></div>
+                <div className="rounded-lg border border-neutral-200 bg-neutral-50 p-3"><p className="text-xs text-neutral-500">Préparation</p><p className="font-medium text-neutral-900">{recipe.prep_time} min</p></div>
+                <div className="rounded-lg border border-neutral-200 bg-neutral-50 p-3"><p className="text-xs text-neutral-500">Cuisson</p><p className="font-medium text-neutral-900">{recipe.cook_time} min</p></div>
+                <div className="rounded-lg border border-neutral-200 bg-neutral-50 p-3"><p className="text-xs text-neutral-500">Coût / portion</p><p className="font-medium text-neutral-900">{formatCurrency(recipe.cost_per_serving)}</p></div>
+                <div className="rounded-lg border border-neutral-200 bg-neutral-50 p-3"><p className="text-xs text-neutral-500">Nutri-Score</p><p className="font-medium text-neutral-900">{recipe.nutri_score}</p></div>
             </div>
 
             <div>
@@ -466,22 +614,13 @@ function renderRecipePreview(recipe: GeneratedRecipe) {
                 <div className="rounded-lg border border-neutral-200 overflow-hidden">
                     <div className="divide-y divide-neutral-200">
                         {recipe.ingredients.map((ingredient, index) => (
-                            <div
-                                key={`${ingredient.name}-${index}`}
-                                className="flex items-start justify-between gap-4 p-4 bg-white"
-                            >
+                            <div key={`${ingredient.name}-${index}`} className="flex items-start justify-between gap-4 p-4 bg-white">
                                 <div>
                                     <p className="font-medium text-neutral-900">{ingredient.name}</p>
-                                    {!!ingredient.allergens?.length && (
-                                        <p className="text-xs text-warning-700 mt-1">
-                                            Allergènes : {ingredient.allergens.join(', ')}
-                                        </p>
-                                    )}
+                                    {!!ingredient.allergens?.length && <p className="text-xs text-warning-700 mt-1">Allergènes : {ingredient.allergens.join(', ')}</p>}
                                 </div>
                                 <div className="text-right text-sm text-neutral-600 whitespace-nowrap">
-                                    <p>
-                                        {ingredient.quantity} {ingredient.unit}
-                                    </p>
+                                    <p>{ingredient.quantity} {ingredient.unit}</p>
                                     <p>{formatCurrency(ingredient.cost)}</p>
                                 </div>
                             </div>
@@ -494,46 +633,11 @@ function renderRecipePreview(recipe: GeneratedRecipe) {
                 <h4 className="text-lg font-semibold text-neutral-900 mb-3">Préparation</h4>
                 <div className="space-y-3">
                     {recipe.steps.map((step) => (
-                        <div
-                            key={step.step_number}
-                            className="rounded-lg border border-neutral-200 bg-white p-4"
-                        >
-                            <p className="text-sm font-semibold text-primary-700 mb-2">
-                                Étape {step.step_number}
-                            </p>
+                        <div key={step.step_number} className="rounded-lg border border-neutral-200 bg-white p-4">
+                            <p className="text-sm font-semibold text-primary-700 mb-2">Étape {step.step_number}</p>
                             <p className="text-neutral-700 leading-7">{step.instruction}</p>
                         </div>
                     ))}
-                </div>
-            </div>
-
-            <div>
-                <h4 className="text-lg font-semibold text-neutral-900 mb-3">Valeurs nutritionnelles</h4>
-                <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
-                    <div className="rounded-lg border border-neutral-200 bg-neutral-50 p-3">
-                        <p className="text-xs text-neutral-500">Calories / portion</p>
-                        <p className="font-medium text-neutral-900">{recipe.calories_per_serving} kcal</p>
-                    </div>
-                    <div className="rounded-lg border border-neutral-200 bg-neutral-50 p-3">
-                        <p className="text-xs text-neutral-500">Protéines</p>
-                        <p className="font-medium text-neutral-900">{recipe.proteines} g</p>
-                    </div>
-                    <div className="rounded-lg border border-neutral-200 bg-neutral-50 p-3">
-                        <p className="text-xs text-neutral-500">Glucides</p>
-                        <p className="font-medium text-neutral-900">{recipe.glucides} g</p>
-                    </div>
-                    <div className="rounded-lg border border-neutral-200 bg-neutral-50 p-3">
-                        <p className="text-xs text-neutral-500">Lipides</p>
-                        <p className="font-medium text-neutral-900">{recipe.lipides} g</p>
-                    </div>
-                    <div className="rounded-lg border border-neutral-200 bg-neutral-50 p-3">
-                        <p className="text-xs text-neutral-500">Fibres</p>
-                        <p className="font-medium text-neutral-900">{recipe.fibres} g</p>
-                    </div>
-                    <div className="rounded-lg border border-neutral-200 bg-neutral-50 p-3">
-                        <p className="text-xs text-neutral-500">Sel</p>
-                        <p className="font-medium text-neutral-900">{recipe.sel} g</p>
-                    </div>
                 </div>
             </div>
 
@@ -542,12 +646,7 @@ function renderRecipePreview(recipe: GeneratedRecipe) {
                     <h4 className="text-lg font-semibold text-neutral-900 mb-3">Allergènes</h4>
                     <div className="flex flex-wrap gap-2">
                         {allAllergens.map((allergen) => (
-                            <span
-                                key={allergen}
-                                className="px-3 py-1 rounded-full bg-warning-50 text-warning-700 text-sm border border-warning-200"
-                            >
-                {allergen}
-              </span>
+                            <span key={allergen} className="px-3 py-1 rounded-full bg-warning-50 text-warning-700 text-sm border border-warning-200">{allergen}</span>
                         ))}
                     </div>
                 </div>
@@ -556,9 +655,7 @@ function renderRecipePreview(recipe: GeneratedRecipe) {
             {recipe.plating && (
                 <div>
                     <h4 className="text-lg font-semibold text-neutral-900 mb-3">Dressage</h4>
-                    <div className="rounded-lg border border-neutral-200 bg-neutral-50 p-4">
-                        <p className="text-neutral-700 leading-7">{recipe.plating}</p>
-                    </div>
+                    <div className="rounded-lg border border-neutral-200 bg-neutral-50 p-4"><p className="text-neutral-700 leading-7">{recipe.plating}</p></div>
                 </div>
             )}
         </div>
@@ -569,55 +666,24 @@ function renderTechnicalSheetPreview(sheet: GeneratedTechnicalSheet) {
     return (
         <div className="space-y-6">
             <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-                <div className="rounded-lg border border-neutral-200 bg-neutral-50 p-3">
-                    <p className="text-xs text-neutral-500">Catégorie</p>
-                    <p className="font-medium text-neutral-900">{sheet.category}</p>
-                </div>
-                <div className="rounded-lg border border-neutral-200 bg-neutral-50 p-3">
-                    <p className="text-xs text-neutral-500">Portions</p>
-                    <p className="font-medium text-neutral-900">{sheet.portions}</p>
-                </div>
-                <div className="rounded-lg border border-neutral-200 bg-neutral-50 p-3">
-                    <p className="text-xs text-neutral-500">Coût total</p>
-                    <p className="font-medium text-neutral-900">{formatCurrency(sheet.total_cost)}</p>
-                </div>
-                <div className="rounded-lg border border-neutral-200 bg-neutral-50 p-3">
-                    <p className="text-xs text-neutral-500">Prix de vente</p>
-                    <p className="font-medium text-neutral-900">{formatCurrency(sheet.selling_price)}</p>
-                </div>
-                <div className="rounded-lg border border-neutral-200 bg-neutral-50 p-3">
-                    <p className="text-xs text-neutral-500">Coût / portion</p>
-                    <p className="font-medium text-neutral-900">{formatCurrency(sheet.cost_per_portion)}</p>
-                </div>
-                <div className="rounded-lg border border-neutral-200 bg-neutral-50 p-3">
-                    <p className="text-xs text-neutral-500">Marge</p>
-                    <p className="font-medium text-neutral-900">x{sheet.margin_ratio}</p>
-                </div>
-                <div className="rounded-lg border border-neutral-200 bg-neutral-50 p-3">
-                    <p className="text-xs text-neutral-500">Préparation</p>
-                    <p className="font-medium text-neutral-900">{sheet.preparation_time} min</p>
-                </div>
-                <div className="rounded-lg border border-neutral-200 bg-neutral-50 p-3">
-                    <p className="text-xs text-neutral-500">Cuisson</p>
-                    <p className="font-medium text-neutral-900">{sheet.cooking_time} min</p>
-                </div>
+                <div className="rounded-lg border border-neutral-200 bg-neutral-50 p-3"><p className="text-xs text-neutral-500">Catégorie</p><p className="font-medium text-neutral-900">{sheet.category}</p></div>
+                <div className="rounded-lg border border-neutral-200 bg-neutral-50 p-3"><p className="text-xs text-neutral-500">Portions</p><p className="font-medium text-neutral-900">{sheet.portions}</p></div>
+                <div className="rounded-lg border border-neutral-200 bg-neutral-50 p-3"><p className="text-xs text-neutral-500">Coût total</p><p className="font-medium text-neutral-900">{formatCurrency(sheet.total_cost)}</p></div>
+                <div className="rounded-lg border border-neutral-200 bg-neutral-50 p-3"><p className="text-xs text-neutral-500">Prix de vente</p><p className="font-medium text-neutral-900">{formatCurrency(sheet.selling_price)}</p></div>
+                <div className="rounded-lg border border-neutral-200 bg-neutral-50 p-3"><p className="text-xs text-neutral-500">Coût / portion</p><p className="font-medium text-neutral-900">{formatCurrency(sheet.cost_per_portion)}</p></div>
+                <div className="rounded-lg border border-neutral-200 bg-neutral-50 p-3"><p className="text-xs text-neutral-500">Marge</p><p className="font-medium text-neutral-900">x{sheet.margin_ratio}</p></div>
+                <div className="rounded-lg border border-neutral-200 bg-neutral-50 p-3"><p className="text-xs text-neutral-500">Préparation</p><p className="font-medium text-neutral-900">{sheet.preparation_time} min</p></div>
+                <div className="rounded-lg border border-neutral-200 bg-neutral-50 p-3"><p className="text-xs text-neutral-500">Cuisson</p><p className="font-medium text-neutral-900">{sheet.cooking_time} min</p></div>
             </div>
 
             <div>
                 <h4 className="text-lg font-semibold text-neutral-900 mb-3">Ingrédients</h4>
                 <div className="space-y-2">
                     {sheet.ingredients.map((ingredient, index) => (
-                        <div
-                            key={`${ingredient.name}-${index}`}
-                            className="rounded-lg border border-neutral-200 bg-white p-4 flex items-start justify-between gap-4"
-                        >
+                        <div key={`${ingredient.name}-${index}`} className="rounded-lg border border-neutral-200 bg-white p-4 flex items-start justify-between gap-4">
                             <div>
                                 <p className="font-medium text-neutral-900">{ingredient.name}</p>
-                                {!!ingredient.allergens?.length && (
-                                    <p className="text-xs text-warning-700 mt-1">
-                                        Allergènes : {ingredient.allergens.join(', ')}
-                                    </p>
-                                )}
+                                {!!ingredient.allergens?.length && <p className="text-xs text-warning-700 mt-1">Allergènes : {ingredient.allergens.join(', ')}</p>}
                             </div>
                             <div className="text-right text-sm text-neutral-600">
                                 <p>{ingredient.quantity} {ingredient.unit}</p>
@@ -643,55 +709,63 @@ function renderTechnicalSheetPreview(sheet: GeneratedTechnicalSheet) {
     );
 }
 
-function renderMenuPreview(menu: GeneratedMenu) {
+function renderMenuPreview(menu: GeneratedMenu & { price?: number; avg_nutri_score?: string; image_url?: string }) {
     return (
         <div className="space-y-6">
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-                <div className="rounded-lg border border-neutral-200 bg-neutral-50 p-3">
-                    <p className="text-xs text-neutral-500">Saison</p>
-                    <p className="font-medium text-neutral-900 capitalize">{menu.season}</p>
-                </div>
-                <div className="rounded-lg border border-neutral-200 bg-neutral-50 p-3">
-                    <p className="text-xs text-neutral-500">Calories totales</p>
-                    <p className="font-medium text-neutral-900">{menu.total_calories} kcal</p>
-                </div>
-                <div className="rounded-lg border border-neutral-200 bg-neutral-50 p-3">
-                    <p className="text-xs text-neutral-500">Équilibré</p>
-                    <p className="font-medium text-neutral-900">{menu.is_balanced ? 'Oui' : 'Non'}</p>
-                </div>
+            <div className="grid grid-cols-1 sm:grid-cols-4 gap-3">
+                <div className="rounded-lg border border-neutral-200 bg-neutral-50 p-3"><p className="text-xs text-neutral-500">Saison</p><p className="font-medium text-neutral-900 capitalize">{menu.season}</p></div>
+                <div className="rounded-lg border border-neutral-200 bg-neutral-50 p-3"><p className="text-xs text-neutral-500">Calories totales</p><p className="font-medium text-neutral-900">{menu.total_calories} kcal</p></div>
+                <div className="rounded-lg border border-neutral-200 bg-neutral-50 p-3"><p className="text-xs text-neutral-500">Équilibré</p><p className="font-medium text-neutral-900">{menu.is_balanced ? 'Oui' : 'Non'}</p></div>
+                <div className="rounded-lg border border-neutral-200 bg-neutral-50 p-3"><p className="text-xs text-neutral-500">Prix</p><p className="font-medium text-neutral-900">{formatCurrency(menu.price || 0)}</p></div>
             </div>
 
             <div className="space-y-4">
                 {menu.items.map((item, index) => (
                     <div key={`${item.title}-${index}`} className="rounded-lg border border-neutral-200 bg-white p-5">
-                        <p className="text-xs uppercase tracking-wide text-primary-700 font-semibold mb-2">
-                            {normalizeMenuItemType(item.item_type)}
-                        </p>
+                        <p className="text-xs uppercase tracking-wide text-primary-700 font-semibold mb-2">{normalizeMenuItemType(item.item_type)}</p>
                         <h4 className="text-lg font-semibold text-neutral-900">{item.title}</h4>
                         <p className="text-neutral-600 mt-2">{item.description}</p>
-
                         {item.recipe && (
                             <div className="mt-4 grid grid-cols-2 md:grid-cols-4 gap-3">
-                                <div className="rounded-lg bg-neutral-50 p-3 border border-neutral-200">
-                                    <p className="text-xs text-neutral-500">Portions</p>
-                                    <p className="font-medium text-neutral-900">{item.recipe.servings}</p>
-                                </div>
-                                <div className="rounded-lg bg-neutral-50 p-3 border border-neutral-200">
-                                    <p className="text-xs text-neutral-500">Temps total</p>
-                                    <p className="font-medium text-neutral-900">
-                                        {item.recipe.prep_time + item.recipe.cook_time} min
-                                    </p>
-                                </div>
-                                <div className="rounded-lg bg-neutral-50 p-3 border border-neutral-200">
-                                    <p className="text-xs text-neutral-500">Calories</p>
-                                    <p className="font-medium text-neutral-900">{item.recipe.calories_per_serving} kcal</p>
-                                </div>
-                                <div className="rounded-lg bg-neutral-50 p-3 border border-neutral-200">
-                                    <p className="text-xs text-neutral-500">Coût / portion</p>
-                                    <p className="font-medium text-neutral-900">{formatCurrency(item.recipe.cost_per_serving)}</p>
-                                </div>
+                                <div className="rounded-lg bg-neutral-50 p-3 border border-neutral-200"><p className="text-xs text-neutral-500">Portions</p><p className="font-medium text-neutral-900">{item.recipe.servings}</p></div>
+                                <div className="rounded-lg bg-neutral-50 p-3 border border-neutral-200"><p className="text-xs text-neutral-500">Temps total</p><p className="font-medium text-neutral-900">{item.recipe.prep_time + item.recipe.cook_time} min</p></div>
+                                <div className="rounded-lg bg-neutral-50 p-3 border border-neutral-200"><p className="text-xs text-neutral-500">Calories</p><p className="font-medium text-neutral-900">{item.recipe.calories_per_serving} kcal</p></div>
+                                <div className="rounded-lg bg-neutral-50 p-3 border border-neutral-200"><p className="text-xs text-neutral-500">Coût / portion</p><p className="font-medium text-neutral-900">{formatCurrency(item.recipe.cost_per_serving)}</p></div>
                             </div>
                         )}
+                    </div>
+                ))}
+            </div>
+        </div>
+    );
+}
+
+function renderCardPreview(card: GeneratedCard) {
+    return (
+        <div className="space-y-6">
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                <div className="rounded-lg border border-neutral-200 bg-neutral-50 p-3"><p className="text-xs text-neutral-500">Catégorie</p><p className="font-medium text-neutral-900">{card.category}</p></div>
+                <div className="rounded-lg border border-neutral-200 bg-neutral-50 p-3"><p className="text-xs text-neutral-500">Saison</p><p className="font-medium text-neutral-900">{card.season}</p></div>
+                <div className="rounded-lg border border-neutral-200 bg-neutral-50 p-3"><p className="text-xs text-neutral-500">Équilibrée</p><p className="font-medium text-neutral-900">{card.is_balanced ? 'Oui' : 'Non'}</p></div>
+            </div>
+
+            <div className="space-y-5">
+                {card.sections.map((section) => (
+                    <div key={`${section.title}-${section.position}`} className="rounded-lg border border-neutral-200 bg-white p-5">
+                        <h4 className="text-lg font-semibold text-neutral-900">{section.title}</h4>
+                        {section.description && <p className="text-neutral-500 mt-1">{section.description}</p>}
+                        <div className="mt-4 space-y-3">
+                            {section.items.map((item, index) => (
+                                <div key={`${item.title}-${index}`} className="flex items-start justify-between gap-4 rounded-lg bg-neutral-50 border border-neutral-200 p-4">
+                                    <div>
+                                        <p className="font-medium text-neutral-900">{item.title}</p>
+                                        <p className="text-sm text-neutral-600 mt-1">{item.description}</p>
+                                        {item.is_suggestion && <span className="inline-flex mt-2 px-2 py-1 rounded-full text-xs bg-primary-50 text-primary-700 border border-primary-200">Suggestion</span>}
+                                    </div>
+                                    <div className="text-right font-semibold text-primary-700 whitespace-nowrap">{item.price.toFixed(2)} €</div>
+                                </div>
+                            ))}
+                        </div>
                     </div>
                 ))}
             </div>
@@ -702,36 +776,18 @@ function renderMenuPreview(menu: GeneratedMenu) {
 function renderHaccpPreview(checklist: GeneratedHACCP) {
     return (
         <div className="space-y-6">
-            <div className="rounded-lg border border-neutral-200 bg-neutral-50 p-4">
-                <p className="text-xs text-neutral-500">Zone</p>
-                <p className="font-medium text-neutral-900 capitalize">{checklist.zone}</p>
-            </div>
-
+            <div className="rounded-lg border border-neutral-200 bg-neutral-50 p-4"><p className="text-xs text-neutral-500">Zone</p><p className="font-medium text-neutral-900 capitalize">{checklist.zone}</p></div>
             <div className="space-y-3">
                 {checklist.items.map((item, index) => (
                     <div key={`${item.check}-${index}`} className="rounded-lg border border-neutral-200 bg-white p-4">
                         <div className="flex items-start justify-between gap-4">
                             <div>
                                 <p className="font-medium text-neutral-900">{item.check}</p>
-                                <p className="text-sm text-neutral-500 mt-1">
-                                    {item.category} • {item.frequency}
-                                </p>
+                                <p className="text-sm text-neutral-500 mt-1">{item.category} • {item.frequency}</p>
                             </div>
-                            <span
-                                className={`px-2 py-1 rounded-full text-xs font-medium ${
-                                    item.critical
-                                        ? 'bg-warning-50 text-warning-700 border border-warning-200'
-                                        : 'bg-success-50 text-success-700 border border-success-200'
-                                }`}
-                            >
-                {item.critical ? 'Critique' : 'Standard'}
-              </span>
+                            <span className={`px-2 py-1 rounded-full text-xs font-medium ${item.critical ? 'bg-warning-50 text-warning-700 border border-warning-200' : 'bg-success-50 text-success-700 border border-success-200'}`}>{item.critical ? 'Critique' : 'Standard'}</span>
                         </div>
-
-                        <div className="mt-3 rounded-lg bg-neutral-50 border border-neutral-200 p-3">
-                            <p className="text-xs text-neutral-500 mb-1">Action corrective</p>
-                            <p className="text-sm text-neutral-700">{item.corrective_action}</p>
-                        </div>
+                        <div className="mt-3 rounded-lg bg-neutral-50 border border-neutral-200 p-3"><p className="text-xs text-neutral-500 mb-1">Action corrective</p><p className="text-sm text-neutral-700">{item.corrective_action}</p></div>
                     </div>
                 ))}
             </div>
@@ -746,14 +802,13 @@ export default function AIStudio() {
     const [category, setCategory] = useState('Plat principal');
     const [season, setSeason] = useState('hiver');
     const [menuType, setMenuType] = useState<'gastronomique' | 'business' | 'evenementiel'>('gastronomique');
+    const [cardCategory, setCardCategory] = useState<CardCategory>('saisonniere');
     const [haccpZone, setHaccpZone] = useState('cuisine');
     const [generating, setGenerating] = useState(false);
     const [generatingImage, setGeneratingImage] = useState(false);
     const [saved, setSaved] = useState(false);
     const [generateImage, setGenerateImage] = useState(true);
-    const [result, setResult] = useState<
-        GeneratedRecipe | GeneratedTechnicalSheet | GeneratedMenu | GeneratedHACCP | null
-    >(null);
+    const [result, setResult] = useState<GeneratedRecipe | GeneratedTechnicalSheet | GeneratedMenu | GeneratedCard | GeneratedHACCP | null>(null);
     const [error, setError] = useState<string | null>(null);
 
     const handleGenerate = async () => {
@@ -763,25 +818,20 @@ export default function AIStudio() {
         setError(null);
 
         try {
-            let generated:
-                | GeneratedRecipe
-                | GeneratedTechnicalSheet
-                | GeneratedMenu
-                | GeneratedHACCP
-                | null = null;
+            let generated: GeneratedRecipe | GeneratedTechnicalSheet | GeneratedMenu | GeneratedCard | GeneratedHACCP | null = null;
 
             switch (type) {
                 case 'recipe':
                     generated = await generateRecipe(prompt || 'Création gastronomique originale', category);
                     break;
                 case 'technical_sheet':
-                    generated = await generateTechnicalSheet(
-                        prompt || 'Fiche technique gastronomique',
-                        category,
-                    );
+                    generated = await generateTechnicalSheet(prompt || 'Fiche technique gastronomique', category);
                     break;
                 case 'menu':
-                    generated = await generateMenu(season, menuType);
+                    generated = await generateMenu(season, menuType) as GeneratedMenu;
+                    break;
+                case 'card':
+                    generated = await generateCard(season, cardCategory);
                     break;
                 case 'haccp':
                     generated = await generateHACCPChecklist(haccpZone);
@@ -810,6 +860,31 @@ export default function AIStudio() {
                     category: sheet.category,
                 });
                 generated = { ...sheet, image_url: imageUrl };
+                setGeneratingImage(false);
+            }
+
+            if (generated && generateImage && type === 'menu') {
+                setGeneratingImage(true);
+                const menu = generated as GeneratedMenu;
+                const imageUrl = await generateAndUploadMenuImage({
+                    title: menu.title,
+                    description: menu.description,
+                    season: menu.season,
+                });
+                generated = { ...menu, image_url: imageUrl || undefined } as GeneratedMenu;
+                setGeneratingImage(false);
+            }
+
+            if (generated && generateImage && type === 'card') {
+                setGeneratingImage(true);
+                const card = generated as GeneratedCard;
+                const imageUrl = await generateAndUploadCardImage({
+                    title: card.title,
+                    description: card.description,
+                    season: card.season,
+                    category: card.category,
+                });
+                generated = { ...card, image_url: imageUrl || undefined };
                 setGeneratingImage(false);
             }
 
@@ -857,20 +932,38 @@ export default function AIStudio() {
                 return;
             }
 
+            if (type === 'card') {
+                await saveCardWithSections(result as GeneratedCard);
+                setSaved(true);
+                navigate('/admin/cards');
+                return;
+            }
+
             if (type === 'haccp') {
                 const checklist = result as GeneratedHACCP;
+
+                const normalizedChecklistItems = (checklist.items || []).map((item) => ({
+                    item: item.check || '',
+                    completed: false,
+                    category: item.category || '',
+                    frequency: item.frequency || '',
+                    critical: item.critical ?? false,
+                    corrective_action: item.corrective_action || '',
+                }));
+
                 const { error } = await supabase.from('haccp_records').insert({
                     type: 'checklist',
                     title: checklist.title,
                     zone: checklist.zone,
                     status: 'pending',
-                    checklist_items: checklist.items,
+                    checklist_items: normalizedChecklistItems,
                 });
 
                 if (error) throw error;
 
                 setSaved(true);
                 navigate('/admin/haccp');
+                return;
             }
         } catch (err) {
             setError(err instanceof Error ? err.message : 'Erreur de sauvegarde');
@@ -884,20 +977,19 @@ export default function AIStudio() {
                     <Brain className="w-8 h-8 text-primary-600" />
                     IA Studio
                 </h1>
-                <p className="text-neutral-500">
-                    Générez automatiquement recettes, fiches techniques, menus et checklists HACCP avec l'IA
-                </p>
+                <p className="text-neutral-500">Générez automatiquement recettes, fiches techniques, menus, cartes et checklists HACCP avec l'IA</p>
             </div>
 
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
                 <div className="card p-6 space-y-6">
                     <div>
                         <label className="label">Type de génération</label>
-                        <div className="grid grid-cols-2 gap-3">
+                        <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
                             {[
                                 { value: 'recipe' as GenerationType, label: 'Recette', icon: ChefHat },
                                 { value: 'technical_sheet' as GenerationType, label: 'Fiche technique', icon: FileText },
                                 { value: 'menu' as GenerationType, label: 'Menu', icon: Menu },
+                                { value: 'card' as GenerationType, label: 'Carte', icon: LayoutTemplate },
                                 { value: 'haccp' as GenerationType, label: 'HACCP', icon: ClipboardCheck },
                             ].map((opt) => (
                                 <button
@@ -909,14 +1001,10 @@ export default function AIStudio() {
                                         setSaved(false);
                                         setError(null);
                                     }}
-                                    className={`p-4 rounded-lg border-2 flex flex-col items-center gap-2 transition-all ${
-                                        type === opt.value ? 'border-primary-500 bg-primary-50' : 'border-neutral-200 hover:border-neutral-300'
-                                    }`}
+                                    className={`p-4 rounded-lg border-2 flex flex-col items-center gap-2 transition-all ${type === opt.value ? 'border-primary-500 bg-primary-50' : 'border-neutral-200 hover:border-neutral-300'}`}
                                 >
                                     <opt.icon className={`w-6 h-6 ${type === opt.value ? 'text-primary-600' : 'text-neutral-400'}`} />
-                                    <span className={`text-sm font-medium ${type === opt.value ? 'text-primary-700' : 'text-neutral-600'}`}>
-                    {opt.label}
-                  </span>
+                                    <span className={`text-sm font-medium ${type === opt.value ? 'text-primary-700' : 'text-neutral-600'}`}>{opt.label}</span>
                                 </button>
                             ))}
                         </div>
@@ -945,41 +1033,42 @@ export default function AIStudio() {
                                     placeholder="Exemple : Saint-Jacques rôties, purée de panais, sauce beurre blanc agrumes"
                                 />
                             </div>
-
-                            <label className="flex items-center gap-3 p-3 rounded-lg bg-neutral-50 border border-neutral-200">
-                                <input
-                                    type="checkbox"
-                                    checked={generateImage}
-                                    onChange={(e) => setGenerateImage(e.target.checked)}
-                                />
-                                <span className="text-sm text-neutral-700">
-                  Générer aussi une photo IA et l’enregistrer dans Supabase Storage
-                </span>
-                            </label>
                         </>
                     )}
 
-                    {type === 'menu' && (
-                        <>
-                            <div>
-                                <label className="label">Saison</label>
-                                <select value={season} onChange={(e) => setSeason(e.target.value)} className="input">
-                                    <option value="hiver">Hiver</option>
-                                    <option value="printemps">Printemps</option>
-                                    <option value="ete">Été</option>
-                                    <option value="automne">Automne</option>
-                                </select>
-                            </div>
+                    {(type === 'menu' || type === 'card') && (
+                        <div>
+                            <label className="label">Saison</label>
+                            <select value={season} onChange={(e) => setSeason(e.target.value)} className="input">
+                                <option value="hiver">Hiver</option>
+                                <option value="printemps">Printemps</option>
+                                <option value="ete">Été</option>
+                                <option value="automne">Automne</option>
+                            </select>
+                        </div>
+                    )}
 
-                            <div>
-                                <label className="label">Type de menu</label>
-                                <select value={menuType} onChange={(e) => setMenuType(e.target.value as typeof menuType)} className="input">
-                                    <option value="gastronomique">Gastronomique</option>
-                                    <option value="business">Business</option>
-                                    <option value="evenementiel">Événementiel</option>
-                                </select>
-                            </div>
-                        </>
+                    {type === 'menu' && (
+                        <div>
+                            <label className="label">Type de menu</label>
+                            <select value={menuType} onChange={(e) => setMenuType(e.target.value as typeof menuType)} className="input">
+                                <option value="gastronomique">Gastronomique</option>
+                                <option value="business">Business</option>
+                                <option value="evenementiel">Événementiel</option>
+                            </select>
+                        </div>
+                    )}
+
+                    {type === 'card' && (
+                        <div>
+                            <label className="label">Type de carte</label>
+                            <select value={cardCategory} onChange={(e) => setCardCategory(e.target.value as CardCategory)} className="input">
+                                <option value="saisonniere">Saisonnière</option>
+                                <option value="restaurant">Restaurant</option>
+                                <option value="traiteur">Traiteur</option>
+                                <option value="evenement">Événement</option>
+                            </select>
+                        </div>
                     )}
 
                     {type === 'haccp' && (
@@ -993,6 +1082,13 @@ export default function AIStudio() {
                                 <option value="service">Service</option>
                             </select>
                         </div>
+                    )}
+
+                    {(type === 'recipe' || type === 'technical_sheet' || type === 'menu' || type === 'card') && (
+                        <label className="flex items-center gap-3 p-3 rounded-lg bg-neutral-50 border border-neutral-200">
+                            <input type="checkbox" checked={generateImage} onChange={(e) => setGenerateImage(e.target.checked)} />
+                            <span className="text-sm text-neutral-700">Générer aussi une image IA de couverture</span>
+                        </label>
                     )}
 
                     <button onClick={handleGenerate} disabled={generating} className="btn-primary w-full gap-2">
@@ -1043,34 +1139,16 @@ export default function AIStudio() {
                             {'title' in (result || {}) && (
                                 <div>
                                     <h3 className="text-xl font-display font-bold text-neutral-900">{(result as any).title}</h3>
-                                    {'description' in (result || {}) && (
-                                        <p className="text-neutral-500">{(result as any).description}</p>
-                                    )}
+                                    {'description' in (result || {}) && <p className="text-neutral-500">{(result as any).description}</p>}
                                 </div>
                             )}
 
-                            {type === 'recipe' && (result as GeneratedRecipe)?.image_url && (
-                                <img
-                                    src={(result as GeneratedRecipe).image_url}
-                                    alt={(result as GeneratedRecipe).title}
-                                    className="w-full h-64 object-cover rounded-lg border border-neutral-200"
-                                />
-                            )}
-
-                            {type === 'technical_sheet' && (result as GeneratedTechnicalSheet)?.image_url && (
-                                <img
-                                    src={(result as GeneratedTechnicalSheet).image_url}
-                                    alt={(result as GeneratedTechnicalSheet).title}
-                                    className="w-full h-64 object-cover rounded-lg border border-neutral-200"
-                                />
+                            {'image_url' in (result || {}) && (result as any).image_url && (
+                                <img src={(result as any).image_url} alt={(result as any).title} className="w-full h-64 object-cover rounded-lg border border-neutral-200" />
                             )}
 
                             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                                <button
-                                    onClick={handleSave}
-                                    disabled={saved}
-                                    className={`btn w-full gap-2 ${saved ? 'btn-success' : 'btn-primary'}`}
-                                >
+                                <button onClick={handleSave} disabled={saved} className={`btn w-full gap-2 ${saved ? 'btn-success' : 'btn-primary'}`}>
                                     <Save className="w-5 h-5" />
                                     {saved ? 'Sauvegardé !' : 'Sauvegarder'}
                                 </button>
@@ -1083,7 +1161,8 @@ export default function AIStudio() {
 
                             {type === 'recipe' && result && renderRecipePreview(result as GeneratedRecipe)}
                             {type === 'technical_sheet' && result && renderTechnicalSheetPreview(result as GeneratedTechnicalSheet)}
-                            {type === 'menu' && result && renderMenuPreview(result as GeneratedMenu)}
+                            {type === 'menu' && result && renderMenuPreview(result as GeneratedMenu & { price?: number; avg_nutri_score?: string; image_url?: string })}
+                            {type === 'card' && result && renderCardPreview(result as GeneratedCard)}
                             {type === 'haccp' && result && renderHaccpPreview(result as GeneratedHACCP)}
                         </div>
                     )}

@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { supabase, Tables } from '../../lib/supabase';
-import { Plus, Search, Edit, Trash2, Eye, EyeOff, Menu } from 'lucide-react';
+import { Plus, Search, Edit, Trash2, Eye, EyeOff, Menu, FileSearch } from 'lucide-react';
 import { formatCurrency } from '../../lib/utils';
 
 export default function Menus() {
@@ -73,6 +73,13 @@ export default function Menus() {
                   <div className="flex items-center gap-2">
                     <span className={`badge ${menu.is_published ? 'badge-success' : 'bg-neutral-100 text-neutral-600'}`}>{menu.is_published ? 'Publié' : 'Brouillon'}</span>
                     <button onClick={() => togglePublished(menu)} className="p-2 rounded-lg hover:bg-neutral-100">{menu.is_published ? <EyeOff className="w-4 h-4 text-neutral-400" /> : <Eye className="w-4 h-4 text-neutral-400" />}</button>
+                      <Link
+                          to={`/admin/menus/${menu.id}`}
+                          className="p-2 rounded-lg hover:bg-neutral-100"
+                          title="Voir la fiche"
+                      >
+                          <FileSearch className="w-4 h-4 text-neutral-400" />
+                      </Link>
                     <Link to={`/admin/menus/${menu.id}/edit`} className="p-2 rounded-lg hover:bg-neutral-100"><Edit className="w-4 h-4 text-neutral-400" /></Link>
                     <button onClick={() => deleteMenu(menu.id)} className="p-2 rounded-lg hover:bg-error-50"><Trash2 className="w-4 h-4 text-error-500" /></button>
                   </div>

@@ -15,6 +15,7 @@ import Contact from './pages/public/Contact';
 import Reviews from './pages/public/Reviews';
 import Legal from './pages/public/Legal';
 
+
 // Auth Pages
 import Login from './pages/auth/Login';
 
@@ -38,6 +39,13 @@ import PortfolioAdmin from './pages/admin/PortfolioAdmin';
 import SettingsPage from './pages/admin/Settings';
 import AIStudio from './pages/admin/AIStudio';
 import AdminContactSubmissions from './pages/admin/ContactSubmissions';
+import AdminRecipeDetail from './pages/admin/RecipeDetail.tsx';
+import TechnicalSheetDetail from './pages/admin/TechnicalSheetDetail';
+import MenuDetail from './pages/admin/MenuDetail';
+import CardDetail from './pages/admin/CardDetail';
+import MissionDetail from './pages/admin/MissionDetail';
+import HACCPDetail from './pages/admin/HACCPDetail';
+import HACCPEdit from './pages/admin/HACCPEdit';
 
 function ProtectedRoute({ children }: { children: React.ReactNode }) {
   const { user, loading } = useAuth();
@@ -65,19 +73,26 @@ function AdminRoutes() {
           <Route index element={<Dashboard />} />
           <Route path="recipes" element={<AdminRecipes />} />
           <Route path="recipes/new" element={<RecipeEditor />} />
+          <Route path="recipes/:id" element={<AdminRecipeDetail />} />
           <Route path="recipes/:id/edit" element={<RecipeEditor />} />
           <Route path="technical-sheets" element={<TechnicalSheets />} />
           <Route path="technical-sheets/new" element={<TechnicalSheetEditor />} />
+          <Route path="technical-sheets/:id" element={<TechnicalSheetDetail />} />
           <Route path="technical-sheets/:id/edit" element={<TechnicalSheetEditor />} />
           <Route path="menus" element={<Menus />} />
           <Route path="menus/new" element={<MenuEditor />} />
+          <Route path="menus/:id" element={<MenuDetail />} />
           <Route path="menus/:id/edit" element={<MenuEditor />} />
           <Route path="cards" element={<Cards />} />
           <Route path="cards/new" element={<CardEditor />} />
+          <Route path="cards/:id" element={<CardDetail />} />
           <Route path="cards/:id/edit" element={<CardEditor />} />
           <Route path="haccp" element={<HACCP />} />
+          <Route path="haccp/:id" element={<HACCPDetail />} />
+          <Route path="haccp/:id/edit" element={<HACCPEdit />} />
           <Route path="missions" element={<Missions />} />
           <Route path="missions/new" element={<MissionEditor />} />
+          <Route path="missions/:id" element={<MissionDetail />} />
           <Route path="missions/:id/edit" element={<MissionEditor />} />
           <Route path="revenues" element={<Revenues />} />
           <Route path="comments" element={<Comments />} />

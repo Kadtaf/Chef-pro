@@ -1,9 +1,9 @@
 import { useEffect, useState } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
+import { Link } from 'react-router-dom';
 import { supabase, Tables } from '../../lib/supabase';
-import { Plus, Search, Edit, Trash2, Briefcase, MapPin, Calendar, Euro } from 'lucide-react';
+import { Plus, Search, Edit, MapPin, Calendar, Euro, FileSearch } from 'lucide-react';
 import { formatCurrency, formatDate } from '../../lib/utils';
-import { MISSION_STATUSES, MISSION_TYPES } from '../../lib/utils';
+import { MISSION_STATUSES } from '../../lib/utils';
 
 const getStatusColor = (status: string) => {
   switch (status) {
@@ -94,6 +94,13 @@ export default function Missions() {
                 <span className="text-sm text-neutral-500">{formatCurrency(mission.daily_rate)}/jour</span>
                 <div className="flex gap-2">
                   <Link to={`/admin/missions/${mission.id}/edit`} className="p-2 rounded-lg hover:bg-neutral-100"><Edit className="w-4 h-4 text-neutral-400" /></Link>
+                  <Link
+                        to={`/admin/missions/${mission.id}`}
+                        className="p-2 rounded-lg hover:bg-neutral-100"
+                        title="Voir la fiche"
+                  >
+                        <FileSearch className="w-4 h-4 text-neutral-400" />
+                  </Link>
                 </div>
               </div>
             </div>

@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { supabase, Tables } from '../../lib/supabase';
-import { Plus, Search, Edit, Trash2, Eye, EyeOff, Star } from 'lucide-react';
+import { Plus, Search, Edit, Trash2, Eye, EyeOff, Star, FileSearch  } from 'lucide-react';
 import { getNutriScoreClass } from '../../lib/utils';
 
 export default function Recipes() {
@@ -202,6 +202,13 @@ export default function Recipes() {
                       >
                         <Star className={`w-4 h-4 ${recipe.is_featured ? 'fill-accent-400 text-accent-400' : 'text-neutral-400'}`} />
                       </button>
+                        <Link
+                            to={`/admin/recipes/${recipe.id}`}
+                            className="p-2 rounded-lg hover:bg-neutral-100"
+                            title="Voir la fiche"
+                        >
+                            <FileSearch className="w-4 h-4 text-neutral-400" />
+                        </Link>
                       <button
                         onClick={() => togglePublished(recipe)}
                         className="p-2 rounded-lg hover:bg-neutral-100"

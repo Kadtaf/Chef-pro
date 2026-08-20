@@ -11,7 +11,7 @@ const corsHeaders = {
     "Access-Control-Allow-Headers": "Content-Type, Authorization, X-Client-Info, Apikey",
 };
 
-type GenerationType = "recipe" | "technical_sheet" | "menu" | "haccp";
+type GenerationType = "recipe" | "technical_sheet" | "menu" | "card" | "haccp";
 
 function buildSystemPrompt(type: GenerationType): string {
     const base = `Tu es un chef cuisinier professionnel expert en gastronomie française, nutrition, HACCP et gestion de restaurant.
@@ -27,6 +27,7 @@ Si une valeur est inconnue, fournis une valeur réaliste plutôt que d'omettre l
 Génère une recette complète au format JSON exact suivant :
 {
   "title": "Nom créatif de la recette",
+  "slug": "nom-de-la-recette",
   "description": "Description appétissante",
   "category": "Entrée|Plat principal|Dessert|Amuse-bouche|Accompagnement",
   "season": "hiver|printemps|ete|automne",
@@ -73,6 +74,7 @@ Contraintes:
 Génère une fiche technique professionnelle au format JSON exact suivant :
 {
   "title": "Nom de la fiche technique",
+  "slug": "nom-de-la-fiche-technique",
   "description": "Description synthétique",
   "category": "Entrée|Plat principal|Dessert|Amuse-bouche|Accompagnement",
   "ingredients": [
@@ -118,6 +120,7 @@ Contraintes:
 Génère un menu français complet et réaliste au format JSON exact suivant :
 {
   "title": "Nom du menu",
+  "slug": "nom-du-menu",
   "description": "Description courte du menu",
   "season": "hiver|printemps|ete|automne",
   "items": [
@@ -127,6 +130,7 @@ Génère un menu français complet et réaliste au format JSON exact suivant :
       "description": "Description appétissante",
       "recipe": {
         "title": "Nom de la recette",
+        "slug": "nom-de-la-recette",
         "description": "Description",
         "category": "Entrée|Plat principal|Dessert",
         "season": "hiver|printemps|ete|automne",
@@ -165,7 +169,9 @@ Génère un menu français complet et réaliste au format JSON exact suivant :
     }
   ],
   "total_calories": 1200,
-  "is_balanced": true
+  "is_balanced": true,
+  "price": 49,
+  "avg_nutri_score": "B"
 }
 Contraintes:
 - Exactement 3 items: un item_type "entree", un item_type "plat", un item_type "dessert".
@@ -175,6 +181,41 @@ Contraintes:
 - Menu cohérent, gastronomique, de saison, adapté à la restauration en France.
 - total_calories doit correspondre approximativement à la somme des recipes.
 - is_balanced doit refléter l'équilibre nutritionnel réel.
+- price doit être réaliste pour un menu complet en France.
+- avg_nutri_score doit être une seule lettre parmi A, B, C, D, E.
+- Aucun texte hors du JSON.
+- Retourne exactement un seul objet JSON valide.`,
+
+        card: `${base}
+Génère une carte de restaurant française de saison au format JSON exact suivant :
+{
+  "title": "Nom de la carte",
+  "slug": "nom-de-la-carte",
+  "description": "Description courte de la carte",
+  "category": "restaurant|traiteur|evenement|saisonniere",
+  "season": "printemps|ete|automne|hiver|all",
+  "is_balanced": true,
+  "sections": [
+    {
+      "title": "Entrées",
+      "description": "Description de section",
+      "position": 1,
+      "items": [
+        {
+          "title": "Nom du plat",
+          "description": "Description appétissante",
+          "price": 14.5,
+          "is_suggestion": false
+        }
+      ]
+    }
+  ]
+}
+Contraintes:
+- 3 à 5 sections maximum.
+- Sections cohérentes pour une carte française : Entrées, Plats, Desserts, Boissons, Suggestions.
+- 3 à 6 items par section.
+- Prix réalistes pour la restauration en France.
 - Aucun texte hors du JSON.
 - Retourne exactement un seul objet JSON valide.`,
 
@@ -217,6 +258,12 @@ function buildUserPrompt(params: {
 Le menu doit comprendre exactement 3 services: entrée, plat, dessert.
 Cuisine française, produits réalistes, intitulés élégants, descriptions professionnelles.
 Chaque service doit inclure une recipe complète conforme au schéma demandé.
+Retourne uniquement le JSON demandé.`;
+    }
+
+    if (type === "card") {
+        return `Génère une carte ${menu_type || "restaurant"} pour la saison ${season || "en cours"}.
+La carte doit être structurée par sections professionnelles et adaptée à la restauration française.
 Retourne uniquement le JSON demandé.`;
     }
 
@@ -324,7 +371,7 @@ Deno.serve(async (req: Request) => {
             });
         }
 
-        if (!["recipe", "technical_sheet", "menu", "haccp"].includes(type)) {
+        if (!["recipe", "technical_sheet", "menu", "card", "haccp"].includes(type)) {
             return new Response(JSON.stringify({ error: "Invalid generation type" }), {
                 status: 400,
                 headers: { ...corsHeaders, "Content-Type": "application/json" },

@@ -27,14 +27,14 @@ function jsonResponse(body: unknown, status = 200) {
 
 function buildImagePrompt({ title, description, plating, category }: ImageRequestBody) {
     return [
-        "Crée une photographie culinaire premium ultra réaliste d'un plat gastronomique.",
-        `Nom du plat : ${title}.`,
+        "Génère une image culinaire fidèle au brief suivant.",
+        `Plat demandé : ${title}.`,
         category ? `Catégorie : ${category}.` : "",
-        description ? `Description culinaire : ${description}.` : "",
-        plating ? `Dressage : ${plating}.` : "",
-        "Style restaurant gastronomique français.",
-        "Assiette élégante, textures réalistes, lumière naturelle douce, cadrage éditorial haut de gamme.",
-        "Sans texte, sans watermark, sans logo."
+        description ? `Description : ${description}.` : "",
+        plating ? `Dressage souhaité : ${plating}.` : "",
+        "Le plat doit rester le sujet principal.",
+        "Rendu attendu : photographie culinaire premium, ultra réaliste, élégante et gastronomique.",
+        "Éviter tout élément non demandé ou incohérent."
     ]
         .filter(Boolean)
         .join(" ");

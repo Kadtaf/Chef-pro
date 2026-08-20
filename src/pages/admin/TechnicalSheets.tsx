@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { supabase, Tables } from '../../lib/supabase';
-import { Plus, Search, Edit, Trash2, Eye, EyeOff, FileText } from 'lucide-react';
+import { Plus, Search, Edit, Trash2, Eye, EyeOff, FileText, FileSearch } from 'lucide-react';
 import { formatCurrency, getNutriScoreClass } from '../../lib/utils';
 
 export default function TechnicalSheets() {
@@ -83,6 +83,13 @@ export default function TechnicalSheets() {
                     <button onClick={() => togglePublished(sheet)} className="p-2 rounded-lg hover:bg-neutral-100">
                       {sheet.is_published ? <EyeOff className="w-4 h-4 text-neutral-400" /> : <Eye className="w-4 h-4 text-neutral-400" />}
                     </button>
+                      <Link
+                          to={`/admin/technical-sheets/${sheet.id}`}
+                          className="p-2 rounded-lg hover:bg-neutral-100"
+                          title="Voir la fiche"
+                      >
+                          <FileSearch className="w-4 h-4 text-neutral-400" />
+                      </Link>
                     <Link to={`/admin/technical-sheets/${sheet.id}/edit`} className="p-2 rounded-lg hover:bg-neutral-100">
                       <Edit className="w-4 h-4 text-neutral-400" />
                     </Link>
