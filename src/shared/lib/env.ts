@@ -23,4 +23,5 @@ export const env = {
   VITE_SITE_URL: url('VITE_SITE_URL', 'https://chef-pro-bordeaux.fr'),
   VITE_SENTRY_DSN: import.meta.env.VITE_SENTRY_DSN || undefined,
   VITE_TURNSTILE_SITE_KEY: import.meta.env.VITE_TURNSTILE_SITE_KEY || undefined,
+  VITE_SUPABASE_IMAGE_TRANSFORMS: import.meta.env.VITE_SUPABASE_IMAGE_TRANSFORMS === 'true',
 } as const;

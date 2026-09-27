@@ -1,4 +1,9 @@
 import {
+  Award,
+  BookOpen,
+  ChartColumn,
+  Images,
+  Tag,
   Bell,
   Brain,
   Briefcase,
@@ -8,7 +13,6 @@ import {
   Euro,
   ExternalLink,
   FileText,
-  FolderOpen,
   LayoutDashboard,
   LogOut,
   Mail,
@@ -29,6 +33,7 @@ import { cn } from '@/shared/lib/cn';
 import { formatDateTime } from '@/shared/lib/format';
 import { Button } from '@/shared/ui/button';
 import { PageLoader } from '@/shared/ui/feedback';
+import { ScrollToTop } from '@/shared/ui/scroll-to-top';
 
 type NavItem = { name: string; to: string; icon: LucideIcon; end?: boolean; badge?: number };
 
@@ -40,14 +45,23 @@ function useNavigationItems(): { title: string; items: NavItem[] }[] {
       items: [{ name: 'Tableau de bord', to: '/admin', icon: LayoutDashboard, end: true }],
     },
     {
-      title: 'Cuisine',
+      title: 'Blog culinaire',
       items: [
         { name: 'Recettes', to: '/admin/recipes', icon: ChefHat },
+        { name: 'Studio IA', to: '/admin/ai-studio', icon: Brain },
+        { name: 'Techniques & conseils', to: '/admin/articles', icon: BookOpen },
+        { name: 'Catégories & tags', to: '/admin/taxonomy', icon: Tags },
+        { name: 'Médiathèque', to: '/admin/media', icon: Images },
+        { name: 'Statistiques', to: '/admin/blog-stats', icon: ChartColumn },
+      ],
+    },
+    {
+      title: 'Cuisine pro',
+      items: [
         { name: 'Fiches techniques', to: '/admin/technical-sheets', icon: FileText },
         { name: 'Menus', to: '/admin/menus', icon: UtensilsCrossed },
         { name: 'Cartes', to: '/admin/cards', icon: CreditCard },
         { name: 'HACCP', to: '/admin/haccp', icon: ClipboardCheck },
-        { name: 'IA Studio', to: '/admin/ai-studio', icon: Brain },
       ],
     },
     {
@@ -62,8 +76,8 @@ function useNavigationItems(): { title: string; items: NavItem[] }[] {
       items: [
         { name: 'Messages', to: '/admin/messages', icon: Mail, badge: unreadMessages },
         { name: 'Avis', to: '/admin/comments', icon: MessageSquare },
-        { name: 'Services & tarifs', to: '/admin/services', icon: Tags },
-        { name: 'Portfolio', to: '/admin/portfolio', icon: FolderOpen },
+        { name: 'Parcours du Chef', to: '/admin/career', icon: Award },
+        { name: 'Prestations & tarifs', to: '/admin/services', icon: Tag },
         { name: 'Paramètres', to: '/admin/settings', icon: Settings },
       ],
     },
@@ -275,11 +289,12 @@ export function Component() {
           />
         )}
 
-        <main id="admin-main" className="mx-auto max-w-7xl p-4 sm:p-6">
+        <main id="admin-main" tabIndex={-1} className="mx-auto max-w-7xl p-4 outline-none sm:p-6">
           <Suspense fallback={<PageLoader />}>
             <Outlet />
           </Suspense>
         </main>
+        <ScrollToTop />
       </div>
     </div>
   );

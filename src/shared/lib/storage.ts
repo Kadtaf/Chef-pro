@@ -1,3 +1,4 @@
+import { env } from './env';
 import { slugify } from './format';
 import { supabase } from './supabase';
 
@@ -23,11 +24,12 @@ export async function uploadImage(file: File, folder: string): Promise<string> {
 }
 
 /**
- * Resized variant served by Supabase image transformations (Pro plan);
- * falls back to the original URL for external images.
+ * Resized variant served by Supabase image transformations. They require the
+ * Pro plan, so they are opt-in (VITE_SUPABASE_IMAGE_TRANSFORMS=true); otherwise
+ * — and for external images — the original URL is returned.
  */
 export function imageUrl(url: string | null | undefined, width?: number): string | undefined {
   if (!url) return undefined;
-  if (!width || !url.includes('/storage/v1/object/public/')) return url;
+  if (!width || !env.VITE_SUPABASE_IMAGE_TRANSFORMS || !url.includes('/storage/v1/object/public/')) return url;
   return `${url.replace('/storage/v1/object/public/', '/storage/v1/render/image/public/')}?width=${width}&resize=cover&quality=75`;
 }

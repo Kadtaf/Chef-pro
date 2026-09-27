@@ -1,6 +1,8 @@
 import { z } from 'zod';
 import type { AiRecipe } from '@ai-contract';
+import type { Term } from '@/features/taxonomy/api';
 import { DIFFICULTY_VALUES, SEASON_VALUES } from '@/shared/domain/constants';
+import { withDetectedAllergens } from '@/shared/lib/allergens';
 import { slugify } from '@/shared/lib/format';
 import {
   amount,
@@ -13,6 +15,8 @@ import {
   type StepValues,
 } from '@/features/culinary/schema';
 import type { RecipeWithChildren } from './api';
+
+const longText = z.string().trim().max(4000);
 
 export const recipeFormSchema = z.object({
   id: z.string().optional(),
@@ -32,7 +36,12 @@ export const recipeFormSchema = z.object({
   portion_weight_g: optionalAmount,
   fruits_legumes_pct: amount().pipe(z.number().max(100, '100 % maximum')),
   image_url: z.union([z.url('URL invalide'), z.literal('')]),
-  plating: z.string().trim().max(2000),
+  plating: longText,
+  equipment: z.array(z.string().trim().min(1).max(80)).max(30),
+  chef_tips: longText,
+  variations: longText,
+  wine_pairing: z.string().trim().max(1000),
+  term_ids: z.array(z.string()),
   is_published: z.boolean(),
   is_featured: z.boolean(),
   ingredients: z.array(ingredientSchema),
@@ -56,6 +65,11 @@ export const emptyRecipe = (): RecipeFormValues => ({
   fruits_legumes_pct: 0,
   image_url: '',
   plating: '',
+  equipment: [],
+  chef_tips: '',
+  variations: '',
+  wine_pairing: '',
+  term_ids: [],
   is_published: false,
   is_featured: false,
   ingredients: [],
@@ -82,6 +96,11 @@ export function recipeToForm(recipe: RecipeWithChildren): RecipeFormValues {
     fruits_legumes_pct: Number(recipe.fruits_legumes_pct),
     image_url: recipe.image_url ?? '',
     plating: recipe.plating ?? '',
+    equipment: recipe.equipment,
+    chef_tips: recipe.chef_tips ?? '',
+    variations: recipe.variations ?? '',
+    wine_pairing: recipe.wine_pairing ?? '',
+    term_ids: recipe.recipe_terms.map((t) => t.term_id),
     is_published: recipe.is_published,
     is_featured: recipe.is_featured,
     ingredients: recipe.recipe_ingredients.map((row) => ingredientFromRow(row)),
@@ -89,7 +108,23 @@ export function recipeToForm(recipe: RecipeWithChildren): RecipeFormValues {
   };
 }
 
-export function recipeFromAi(ai: AiRecipe, imageUrl?: string | null): RecipeFormValues {
+const normalize = (value: string) => slugify(value);
+
+/**
+ * Maps an AI recipe to form values: taxonomy slugs/names are resolved against
+ * the existing terms, and allergens are completed by rule-based detection.
+ */
+export function recipeFromAi(ai: AiRecipe, imageUrl?: string | null, terms: Term[] = []): RecipeFormValues {
+  const termIds = terms
+    .filter(
+      (term) =>
+        (term.kind === 'type' && ai.types.includes(term.slug as (typeof ai.types)[number])) ||
+        (term.kind === 'cuisine' && ai.cuisine === term.slug) ||
+        (term.kind === 'technique' &&
+          ai.techniques.some((t) => normalize(t) === term.slug || normalize(t) === normalize(term.name))),
+    )
+    .map((term) => term.id);
+
   return {
     ...emptyRecipe(),
     title: ai.title,
@@ -104,7 +139,12 @@ export function recipeFromAi(ai: AiRecipe, imageUrl?: string | null): RecipeForm
     fruits_legumes_pct: ai.fruits_legumes_pct,
     image_url: imageUrl ?? '',
     plating: ai.plating,
-    ingredients: ai.ingredients.map((i) => ingredientFromRow(i)),
+    equipment: ai.equipment,
+    chef_tips: ai.chef_tips,
+    variations: ai.variations,
+    wine_pairing: ai.wine_pairing,
+    term_ids: termIds,
+    ingredients: ai.ingredients.map((i) => ingredientFromRow({ ...i, allergens: withDetectedAllergens(i) })),
     steps: ai.steps.map((s) => ({ instruction: s.instruction })),
   };
 }
@@ -113,11 +153,12 @@ export type RecipePayload = {
   recipe: Record<string, unknown>;
   ingredients: IngredientValues[];
   steps: StepValues[];
+  termIds: string[];
 };
 
 /** Builds the `save_recipe` RPC payload, computing every derived column. */
 export function toRecipePayload(values: RecipeFormValues): RecipePayload {
-  const { ingredients, steps, id, slug, ...fields } = values;
+  const { ingredients, steps, id, slug, term_ids, ...fields } = values;
   const { nutrition, costPerPortion } = computeAggregates({
     ingredients,
     portions: values.servings,
@@ -133,6 +174,9 @@ export function toRecipePayload(values: RecipeFormValues): RecipePayload {
       image_url: fields.image_url || null,
       description: fields.description || null,
       plating: fields.plating || null,
+      chef_tips: fields.chef_tips || null,
+      variations: fields.variations || null,
+      wine_pairing: fields.wine_pairing || null,
       calories_per_serving: nutrition.perPortion.calories,
       lipides: nutrition.perPortion.lipides,
       acides_gras_satures: nutrition.perPortion.acides_gras_satures,
@@ -146,5 +190,6 @@ export function toRecipePayload(values: RecipeFormValues): RecipePayload {
     },
     ingredients,
     steps,
+    termIds: term_ids,
   };
 }

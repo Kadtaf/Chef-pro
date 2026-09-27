@@ -114,11 +114,20 @@ export function RecipeBody({ recipe, showCosts = false }: { recipe: RecipeWithCh
           )}
         </Card>
 
-        {recipe.plating && (
-          <Card className="p-6 sm:p-8">
-            <h2 className="mb-4 text-xl font-semibold text-neutral-900">Dressage</h2>
-            <p className="leading-relaxed whitespace-pre-line text-neutral-700">{recipe.plating}</p>
-          </Card>
+        {[
+          { title: 'Matériel', text: recipe.equipment.join(' · ') },
+          { title: 'Dressage', text: recipe.plating },
+          { title: 'Conseils du Chef', text: recipe.chef_tips },
+          { title: 'Variantes', text: recipe.variations },
+          { title: 'Accord mets-vins', text: recipe.wine_pairing },
+        ].map(
+          ({ title, text }) =>
+            text && (
+              <Card key={title} className="p-6 sm:p-8">
+                <h2 className="mb-4 text-xl font-semibold text-neutral-900">{title}</h2>
+                <p className="leading-relaxed whitespace-pre-line text-neutral-700">{text}</p>
+              </Card>
+            ),
         )}
 
         <Card className="p-6 sm:p-8">

@@ -94,6 +94,18 @@ export function Component() {
                   <td>Jusqu’au retrait du consentement</td>
                 </tr>
                 <tr>
+                  <td>Newsletter « Les inspirations du Chef »</td>
+                  <td>Adresse email</td>
+                  <td>Consentement (double confirmation)</td>
+                  <td>Jusqu’à la désinscription (lien dans chaque email)</td>
+                </tr>
+                <tr>
+                  <td>Notes des recettes (une par visiteur)</td>
+                  <td>Identifiant aléatoire du navigateur, note</td>
+                  <td>Intérêt légitime</td>
+                  <td>Durée de publication de la recette</td>
+                </tr>
+                <tr>
                   <td>Sécurité et prévention du spam</td>
                   <td>Empreinte (hachée) de l’adresse IP</td>
                   <td>Intérêt légitime</td>
@@ -103,8 +115,8 @@ export function Component() {
             </table>
             <p>
               <strong>Destinataires :</strong> vos données ne sont ni vendues ni cédées. Elles sont traitées par nos
-              sous-traitants techniques : Supabase (hébergement), Cloudflare (protection anti-spam) et, le cas échéant,
-              notre prestataire d’envoi d’emails.
+              sous-traitants techniques : Supabase (hébergement), Cloudflare (protection anti-spam), Brevo (newsletter)
+              et, le cas échéant, notre prestataire d’envoi d’emails.
             </p>
             <p>
               <strong>Vos droits :</strong> accès, rectification, effacement, limitation, opposition et portabilité.
@@ -116,7 +128,8 @@ export function Component() {
             <p>
               Ce site n’utilise aucun cookie publicitaire ni de mesure d’audience. Seuls des éléments strictement
               nécessaires sont déposés (session de l’espace d’administration, protection anti-spam) : ils sont exemptés
-              de consentement.
+              de consentement. Vos recettes favorites et un identifiant aléatoire (servant à n’enregistrer qu’une note
+              par visiteur) sont conservés uniquement dans votre navigateur ; vous pouvez les effacer à tout moment.
             </p>
 
             <h2>6. Limitation de responsabilité</h2>

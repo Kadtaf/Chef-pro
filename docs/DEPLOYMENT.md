@@ -4,7 +4,7 @@ Procédure à suivre **dans l'ordre** pour passer de la version 1 à la version 
 
 ## 1. 🔒 Actions immédiates sur le projet Supabase (dashboard)
 
-1. **Authentication → Providers → Email** : désactiver _Enable sign up_ (et tout autre fournisseur inutilisé).
+1. **Authentication → Sign In / Providers** : désactiver _Allow new users to sign up_ (inscriptions), **mais laisser le fournisseur _Email_ activé** — sinon plus personne, administrateur compris, ne peut se connecter (« Email logins are disabled »). Désactiver les autres fournisseurs inutilisés.
    En version 1, n'importe qui pouvait créer un compte via l'API et obtenir un accès administrateur complet.
 2. **Authentication → Users** : vérifier la liste. Supprimer tout compte inconnu.
 3. **Project Settings → API** : régénérer la clé `service_role` (elle figurait dans des fichiers locaux du projet exporté).
@@ -18,7 +18,7 @@ L'archive `public/chef-pro-bordeaux-complete.zip` (code source complet) a été 
 ```bash
 # Réécrit l'historique : à coordonner avec toute personne ayant cloné le dépôt.
 pip install git-filter-repo
-git filter-repo --path public/chef-pro-bordeaux-complete.zip --path public/download.html --invert-paths
+git filter-repo --path chef-pro-bordeaux-complete.zip --path public/chef-pro-bordeaux-complete.zip --path public/download.html --invert-paths
 git push --force --all
 ```
 
@@ -46,7 +46,14 @@ Points d'attention :
 - Elle échoue volontairement si la table `settings` contient plusieurs lignes (fusionnez-les d'abord).
 - Toutes les migrations sont testées automatiquement (`npm run test`) sur un Postgres en mémoire.
 
-Ensuite, régénérez les types : `npm run db:types`.
+### Blog culinaire (migrations `20260927*`)
+
+| Migration         | Contenu                                                                                                                                                                  |
+| ----------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `blog_engagement` | Taxonomie (types, techniques, styles, tags), saisons, champs éditoriaux des recettes, notes/vues/favoris, `search_recipes`, `related_recipes`, articles, parcours, stats |
+| `seed_content`    | Identité du Chef, parcours issu du CV, 6 techniques et 6 conseils (brouillons relus à publier)                                                                           |
+
+Ensuite, régénérez les types : `npm run db:types`. Cette commande remplace `src/shared/types/database.generated.ts`, provisoirement complété par `scripts/patch-generated-types.mjs` (le script peut être supprimé ensuite).
 
 Pour les **anciennes recettes**, les Nutri-Scores stockés en v1 étaient faux (bug de paramètres). Ouvrez chaque recette et réenregistrez-la pour recalculer nutrition, coût et Nutri-Score (renseignez le poids de portion si les ingrédients sont en « pièce »).
 
@@ -60,21 +67,30 @@ npm run functions:deploy
 
 | Secret                                          | Obligatoire | Rôle                                                                  |
 | ----------------------------------------------- | ----------- | --------------------------------------------------------------------- |
-| `MISTRAL_API_KEY`                               | oui         | Génération de texte et d'images                                       |
-| `MISTRAL_IMAGE_AGENT_ID`                        | oui         | Agent Mistral de génération d'images                                  |
+| `GEMINI_API_KEY`                                | oui         | Studio IA : recettes, fiches, menus, cartes, articles (Google Gemini) |
+| `GEMINI_MODEL`                                  | non         | Modèle Gemini (défaut `gemini-flash-latest`)                          |
+| `GEMINI_FALLBACK_MODEL`                         | non         | Modèle de secours si surcharge (défaut `gemini-flash-lite-latest`)    |
+| `STABILITY_API_KEY`                             | oui         | Photos culinaires réalistes (Stability AI, Stable Image Core)         |
 | `ALLOWED_ORIGINS`                               | oui         | Domaines autorisés (CORS), séparés par des virgules                   |
 | `AI_DAILY_LIMIT`                                | non (50)    | Quota de générations IA par administrateur et par 24 h                |
 | `PUBLIC_SUBMIT_LIMIT_PER_HOUR`                  | non (5)     | Limite des formulaires publics par IP                                 |
 | `TURNSTILE_SECRET_KEY`                          | recommandé  | Captcha Cloudflare Turnstile (+ `VITE_TURNSTILE_SITE_KEY` côté front) |
 | `RESEND_API_KEY`, `NOTIFY_EMAIL`, `NOTIFY_FROM` | non         | Notification email des messages et avis                               |
+| `BREVO_API_KEY`, `BREVO_LIST_ID`                | newsletter  | Inscription à la liste Brevo « Les inspirations du Chef »             |
+| `BREVO_DOI_TEMPLATE_ID`                         | newsletter  | Modèle Brevo de double confirmation (RGPD)                            |
+| `BREVO_REDIRECT_URL`                            | newsletter  | Page après confirmation : `https://<domaine>/newsletter/confirmee`    |
 
 `SUPABASE_URL` et `SUPABASE_SERVICE_ROLE_KEY` sont fournis automatiquement par la plateforme.
+
+**Brevo (double opt-in)** : créez une liste, puis un modèle transactionnel de type « Double opt-in » contenant le lien `{{ params.DOIurl }}` ; renseignez son identifiant dans `BREVO_DOI_TEMPLATE_ID`. Le contact n'est ajouté à la liste qu'après avoir cliqué sur ce lien.
+
+Les fonctions `engage` et `newsletter` sont publiques (`verify_jwt = false`) : elles valident chaque requête, limitent le débit et n'écrivent qu'à travers des RPC dédiées.
 
 ## 5. Front-end
 
 Variables d'environnement de l'hébergeur : `VITE_SUPABASE_URL`, `VITE_SUPABASE_ANON_KEY`, `VITE_SITE_URL`, et en option `VITE_SENTRY_DSN`, `VITE_TURNSTILE_SITE_KEY`.
 
-- **Vercel** : `vercel.json` fournit la réécriture SPA, le cache des assets et les en-têtes de sécurité (CSP, HSTS…).
+- **Vercel** : `vercel.json` fournit la réécriture SPA, le cache des assets et les en-têtes de sécurité (CSP, HSTS…). La CSP autorise les vidéos intégrées YouTube (`youtube-nocookie.com`) et Vimeo des pages Techniques.
 - **Netlify / Cloudflare Pages** : `public/_redirects` et `public/_headers` font de même.
 
 Commande de build : `npm run build` (génère aussi `sitemap.xml` avec les recettes publiées) — dossier publié : `dist`.
@@ -82,5 +98,7 @@ Commande de build : `npm run build` (génère aussi `sitemap.xml` avec les recet
 ## 6. Avant la mise en ligne
 
 - Compléter le SIRET et l'hébergeur dans `src/features/public-site/legal-page.tsx` (constante `LEGAL`).
-- Renseigner les paramètres du site (admin → Paramètres) : coordonnées, réseaux sociaux, SEO.
+- Renseigner les paramètres du site (admin → Paramètres) : identité du Chef (portrait, bio), coordonnées, réseaux sociaux, SEO.
+- Relire puis publier les techniques et conseils importés (admin → Techniques & conseils) et le parcours (admin → Parcours).
+- Ajouter les mentions newsletter (Brevo, finalité, désinscription) dans la politique de confidentialité.
 - Déclarer le site dans Google Search Console et soumettre `https://<domaine>/sitemap.xml`.

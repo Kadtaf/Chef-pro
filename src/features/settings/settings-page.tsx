@@ -1,5 +1,5 @@
 import { zodResolver } from '@hookform/resolvers/zod';
-import { Globe, Image, Mail, Save, Search, Share2 } from 'lucide-react';
+import { ChefHat, Globe, Image, Mail, Save, Search, Share2 } from 'lucide-react';
 import { useForm, useWatch } from 'react-hook-form';
 import { z } from 'zod';
 import { useUnsavedChangesGuard } from '@/shared/hooks/use-unsaved-changes';
@@ -26,8 +26,21 @@ const schema = z.object({
   seo_title: z.string().trim().max(70, '70 caractères max. (affichage Google)'),
   seo_description: z.string().trim().max(160, '160 caractères max. (affichage Google)'),
   seo_keywords: z.string().trim().max(300),
+  chef_name: z.string().trim().max(80),
+  chef_title: z.string().trim().max(80),
+  chef_bio: z.string().trim().max(1500),
+  chef_portrait_url: optionalUrl,
+  years_experience: z.number({ error: 'Nombre requis' }).int().min(0).max(70),
+  languages: z.string(),
+  education: z.string(),
 });
 type Values = z.infer<typeof schema>;
+
+const splitLines = (value: string) =>
+  value
+    .split('\n')
+    .map((line) => line.trim())
+    .filter(Boolean);
 
 const toValues = (s: SiteSettings): Values => ({
   site_name: s.site_name,
@@ -43,6 +56,14 @@ const toValues = (s: SiteSettings): Values => ({
   seo_title: s.seo_title,
   seo_description: s.seo_description,
   seo_keywords: s.seo_keywords,
+  // Fallbacks keep the form usable if the database lags behind the app (migration not applied yet).
+  chef_name: s.chef_name ?? '',
+  chef_title: s.chef_title ?? '',
+  chef_bio: s.chef_bio ?? '',
+  chef_portrait_url: s.chef_portrait_url ?? '',
+  years_experience: s.years_experience ?? 0,
+  languages: (s.languages ?? []).join('\n'),
+  education: (s.education ?? []).join('\n'),
 });
 
 export function Component() {
@@ -60,9 +81,9 @@ function SettingsForm({ settings }: { settings: SiteSettings }) {
   const { register, formState, control, setValue } = form;
   const { errors, isDirty } = formState;
   useUnsavedChangesGuard(isDirty);
-  const [seoTitle, seoDescription, logo, banner] = useWatch({
+  const [seoTitle, seoDescription, logo, banner, portrait] = useWatch({
     control,
-    name: ['seo_title', 'seo_description', 'logo_url', 'banner_url'],
+    name: ['seo_title', 'seo_description', 'logo_url', 'banner_url', 'chef_portrait_url'],
   });
 
   const onSubmit = form.handleSubmit(async (values) => {
@@ -74,6 +95,9 @@ function SettingsForm({ settings }: { settings: SiteSettings }) {
       linkedin_url: values.linkedin_url || null,
       logo_url: values.logo_url || null,
       banner_url: values.banner_url || null,
+      chef_portrait_url: values.chef_portrait_url || null,
+      languages: splitLines(values.languages),
+      education: splitLines(values.education),
     });
     form.reset(toValues(saved));
   });
@@ -90,6 +114,45 @@ function SettingsForm({ settings }: { settings: SiteSettings }) {
           </Button>
         }
       />
+
+      <CardSection
+        title={
+          <span className="flex items-center gap-2">
+            <ChefHat className="size-5" aria-hidden /> Le Chef
+          </span>
+        }
+        description="Identité affichée sur la page À propos et l'accueil."
+      >
+        <div className="grid grid-cols-1 gap-5 md:grid-cols-2">
+          <Field label="Nom du chef" error={errors.chef_name?.message}>
+            {(c) => <Input {...c} {...register('chef_name')} />}
+          </Field>
+          <Field label="Titre" error={errors.chef_title?.message}>
+            {(c) => <Input {...c} {...register('chef_title')} />}
+          </Field>
+          <Field label="Années d'expérience" error={errors.years_experience?.message}>
+            {(c) => <Input {...c} type="number" min={0} {...register('years_experience', { valueAsNumber: true })} />}
+          </Field>
+          <div className="md:row-span-2">
+            <ImageField
+              label="Portrait"
+              folder="branding"
+              value={portrait}
+              onChange={(url) => setValue('chef_portrait_url', url, { shouldDirty: true, shouldValidate: true })}
+              error={errors.chef_portrait_url?.message}
+            />
+          </div>
+          <Field label="Biographie" error={errors.chef_bio?.message}>
+            {(c) => <Textarea {...c} rows={6} {...register('chef_bio')} />}
+          </Field>
+          <Field label="Langues" hint="Une par ligne">
+            {(c) => <Textarea {...c} rows={3} {...register('languages')} />}
+          </Field>
+          <Field label="Formations & diplômes" hint="Une par ligne, format « Année — Intitulé »">
+            {(c) => <Textarea {...c} rows={5} {...register('education')} />}
+          </Field>
+        </div>
+      </CardSection>
 
       <CardSection
         title={

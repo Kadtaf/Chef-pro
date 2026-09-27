@@ -1,13 +1,13 @@
 # Chef Pro Bordeaux
 
-Site vitrine et back-office d'un chef de cuisine freelance : recettes avec nutrition et Nutri-Score, fiches techniques chiffrées, menus, cartes, plan de maîtrise sanitaire (HACCP), missions, revenus, avis clients et génération de contenu par IA.
+Site vitrine, blog culinaire et back-office d'un chef de cuisine freelance : blog de recettes (filtres par saison et type, recherche, favoris et notes sans compte, nutrition et Nutri-Score, allergènes, accords mets-vins), techniques et conseils du Chef, menus de saison, newsletter « Les inspirations du Chef », parcours professionnel ; côté pro : fiches techniques chiffrées, menus, cartes, HACCP, missions, revenus, avis clients, statistiques du blog et IA Studio.
 
 | Couche        | Technologies                                                                                       |
 | ------------- | -------------------------------------------------------------------------------------------------- |
 | Front         | React 19, React Router 8 (data mode, routes lazy), TypeScript 6, Vite 8, Tailwind CSS 4, Radix UI  |
 | Données       | TanStack Query 5, supabase-js 2, React Hook Form + Zod 4                                           |
 | Back-end      | Supabase : Postgres (RLS), Auth, Storage, Edge Functions (Deno)                                    |
-| IA            | Mistral (texte : `mistral-large`, images : agent Mistral) via edge functions authentifiées         |
+| IA            | Google Gemini Flash (texte) et Stability AI (photos, Stable Image Core) via edge functions         |
 | Qualité       | Vitest (unitaires + SQL sur PGlite), Playwright (E2E), ESLint (type-aware + a11y), Prettier, Husky |
 | Observabilité | Sentry (optionnel, chargé à la demande)                                                            |
 
@@ -26,7 +26,7 @@ Base de données et fonctions (voir [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md) pou
 ```bash
 supabase link --project-ref <ref>
 supabase db push                                         # applique supabase/migrations
-supabase secrets set --env-file supabase/functions/.env  # clés Mistral, origines CORS…
+supabase secrets set --env-file supabase/functions/.env  # clés Gemini / Stability, CORS…
 npm run functions:deploy
 npm run db:types                                         # régénère src/shared/types/database.ts
 ```
@@ -37,15 +37,15 @@ L'inscription publique est désactivée : tout nouveau compte est `viewer` et n'
 
 ## Commandes
 
-| Commande                  | Rôle                                                                 |
-| ------------------------- | -------------------------------------------------------------------- |
-| `npm run dev`             | Serveur de développement                                             |
-| `npm run build`           | Génère le sitemap (recettes publiées incluses) puis le build de prod |
-| `npm run check`           | Typecheck + lint + format + tests (ce que lance la CI)               |
-| `npm run test`            | Tests unitaires (jsdom) et tests SQL/RLS (Postgres en mémoire)       |
-| `npm run test:e2e`        | Tests Playwright (Supabase simulé, aucune donnée réelle)             |
-| `npm run functions:check` | Typecheck Deno des edge functions                                    |
-| `npm run db:types`        | Régénère les types TypeScript depuis la base liée                    |
+| Commande                  | Rôle                                                           |
+| ------------------------- | -------------------------------------------------------------- |
+| `npm run dev`             | Serveur de développement                                       |
+| `npm run build`           | Génère le sitemap (recettes et articles publiés) puis le build |
+| `npm run check`           | Typecheck + lint + format + tests (ce que lance la CI)         |
+| `npm run test`            | Tests unitaires (jsdom) et tests SQL/RLS (Postgres en mémoire) |
+| `npm run test:e2e`        | Tests Playwright (Supabase simulé, aucune donnée réelle)       |
+| `npm run functions:check` | Typecheck Deno des edge functions                              |
+| `npm run db:types`        | Régénère les types TypeScript depuis la base liée              |
 
 ## Architecture
 
@@ -55,7 +55,8 @@ src/
 ├── features/            un dossier par domaine métier
 │   ├── recipes/         api.ts (React Query) · schema.ts (Zod + mapping RPC) · pages · pdf.ts
 │   ├── technical-sheets/ menus/ cards/ haccp/ missions/ revenues/
-│   ├── comments/ messages/ portfolio/ services/ settings/ dashboard/
+│   ├── comments/ messages/ services/ settings/ dashboard/
+│   ├── taxonomy/ articles/ career/ seasonal/ engagement/ newsletter/ blog-stats/ media/
 │   ├── culinary/        ingrédients, étapes, nutrition, coûts (partagé recettes / fiches)
 │   ├── ai-studio/       génération, aperçu, sauvegarde des contenus IA
 │   ├── export/          moteur PDF générique (jsPDF chargé à la demande)
@@ -67,7 +68,7 @@ src/
     └── types/           types de la base (générés)
 supabase/
 ├── migrations/          schéma, RLS, RPC transactionnelles, audit, dashboard
-├── functions/           ai-generate · ai-generate-image · public-submit (+ _shared)
+├── functions/           ai-generate · ai-generate-image · public-submit · engage · newsletter (+ _shared)
 └── tests/               tests RLS/RPC exécutés sur PGlite
 ```
 
@@ -76,6 +77,7 @@ Principes :
 - **La sécurité est côté serveur.** Toute écriture exige `profiles.role = 'admin'` (fonction `is_admin()` dans les politiques RLS). Le visiteur anonyme ne lit que le contenu publié et ne peut rien écrire : les formulaires publics passent par la fonction `public-submit` (validation, honeypot, captcha Turnstile optionnel, limitation de débit).
 - **Une seule source de vérité pour les calculs.** Les valeurs nutritionnelles, le Nutri-Score, les coûts et les allergènes sont dérivés des ingrédients (`features/culinary`), que la saisie soit manuelle ou générée par IA.
 - **Écritures atomiques.** Une recette et ses ingrédients (fiche, menu, carte…) sont enregistrés par une RPC Postgres en une seule transaction.
+- **Engagement anonyme sécurisé.** Favoris (navigateur), vues et notes (une par visiteur) passent par la fonction `engage` ; les compteurs ne sont modifiables que par la RPC `record_engagement` (service_role), jamais directement.
 - **Contrat IA partagé.** `supabase/functions/_shared/ai-schemas.ts` est importé par les edge functions et par le front (`@ai-contract`) : les réponses de l'IA sont validées côté serveur avec le même schéma que celui utilisé par l'interface.
 
 ## Nutri-Score

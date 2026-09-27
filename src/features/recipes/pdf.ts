@@ -57,9 +57,16 @@ export function recipeToPdf(recipe: RecipeWithChildren, { withCosts = true } = {
         heading: 'Préparation',
         blocks: [{ kind: 'list', ordered: true, items: recipe.recipe_steps.map((s) => s.instruction) }],
       },
-      ...(recipe.plating
-        ? [{ heading: 'Dressage', blocks: [{ kind: 'paragraph' as const, text: recipe.plating }] }]
-        : []),
+      ...[
+        { heading: 'Matériel', text: recipe.equipment.join(' · ') },
+        { heading: 'Dressage', text: recipe.plating },
+        { heading: 'Conseils du Chef', text: recipe.chef_tips },
+        { heading: 'Variantes', text: recipe.variations },
+        {
+          heading: 'Accord mets-vins',
+          text: recipe.wine_pairing && `${recipe.wine_pairing}\nL'abus d'alcool est dangereux pour la santé.`,
+        },
+      ].flatMap(({ heading, text }) => (text ? [{ heading, blocks: [{ kind: 'paragraph' as const, text }] }] : [])),
       {
         heading: 'Valeurs nutritionnelles (par portion)',
         blocks: [

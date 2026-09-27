@@ -9,7 +9,17 @@
  */
 import { z } from 'zod';
 
-import { CARD_CATEGORY_VALUES, DIFFICULTY_VALUES, MENU_ITEM_TYPE_VALUES, SEASON_VALUES } from './vocabulary.ts';
+import {
+  CARD_CATEGORY_VALUES,
+  CUISINE_STYLE_SLUGS,
+  DIFFICULTY_VALUES,
+  ENGAGEMENT_EVENTS,
+  IMAGE_AMBIANCES,
+  IMAGE_ASPECT_RATIOS,
+  MENU_ITEM_TYPE_VALUES,
+  RECIPE_TYPE_SLUGS,
+  SEASON_VALUES,
+} from './vocabulary.ts';
 
 export * from './vocabulary.ts';
 
@@ -63,6 +73,27 @@ export const aiRecipeSchema = z.object({
   ingredients: z.array(aiIngredientSchema).min(1),
   steps: z.array(stepSchema).min(1),
   plating: text,
+  equipment: z.array(z.string().trim().min(1)).catch([]),
+  chef_tips: text,
+  variations: text,
+  wine_pairing: text,
+  /** Recipe type slugs (unknown values are dropped rather than failing the generation). */
+  types: z
+    .array(z.string())
+    .transform((values) =>
+      values.filter((v): v is (typeof RECIPE_TYPE_SLUGS)[number] =>
+        (RECIPE_TYPE_SLUGS as readonly string[]).includes(v),
+      ),
+    )
+    .catch([]),
+  techniques: z.array(z.string().trim().min(1)).catch([]),
+  cuisine: z.enum(CUISINE_STYLE_SLUGS).nullable().catch(null),
+  /** English description of what is visible on the plate, used to brief the photo model. */
+  photo_brief: z
+    .string()
+    .trim()
+    .transform((value) => value.slice(0, 600))
+    .catch(''),
 });
 
 export const aiTechnicalSheetSchema = aiRecipeSchema
@@ -132,12 +163,39 @@ export const aiHaccpSchema = z.object({
     .min(1),
 });
 
+export const aiSuggestionsSchema = z.object({
+  ideas: z
+    .array(
+      z.object({
+        title: z.string().trim().min(1),
+        pitch: text,
+        type: z.enum(RECIPE_TYPE_SLUGS).catch('plat'),
+        season: seasonSchema,
+        cuisine: z.enum(CUISINE_STYLE_SLUGS).nullable().catch(null),
+        key_ingredients: z.array(z.string()).catch([]),
+      }),
+    )
+    .min(1),
+});
+
+export const aiArticleSchema = z.object({
+  title: z.string().trim().min(1),
+  excerpt: text,
+  /** Rich text: "## " headings, "- " bullets, "1. " ordered steps, blank-line paragraphs. */
+  body: z.string().trim().min(200),
+  difficulty: z.enum(DIFFICULTY_VALUES).nullable().catch(null),
+  reading_minutes: z.coerce.number().int().min(1).max(30).catch(3),
+  tags: z.array(z.string().trim().min(1)).catch([]),
+});
+
 export const aiSchemas = {
   recipe: aiRecipeSchema,
   technical_sheet: aiTechnicalSheetSchema,
   menu: aiMenuSchema,
   card: aiCardSchema,
   haccp: aiHaccpSchema,
+  suggestions: aiSuggestionsSchema,
+  article: aiArticleSchema,
 } as const;
 
 export type AiGenerationType = keyof typeof aiSchemas;
@@ -149,6 +207,8 @@ export type AiTechnicalSheet = z.infer<typeof aiTechnicalSheetSchema>;
 export type AiMenu = z.infer<typeof aiMenuSchema>;
 export type AiCard = z.infer<typeof aiCardSchema>;
 export type AiHaccp = z.infer<typeof aiHaccpSchema>;
+export type AiSuggestions = z.infer<typeof aiSuggestionsSchema>;
+export type AiArticle = z.infer<typeof aiArticleSchema>;
 export type AiResult<T extends AiGenerationType> = z.infer<(typeof aiSchemas)[T]>;
 
 export const aiGenerateRequestSchema = z.discriminatedUnion('type', [
@@ -156,6 +216,9 @@ export const aiGenerateRequestSchema = z.discriminatedUnion('type', [
     type: z.literal('recipe'),
     prompt: z.string().trim().max(500).optional(),
     category: z.string().trim().max(60).optional(),
+    season: z.enum(SEASON_VALUES).optional(),
+    cuisine: z.enum(CUISINE_STYLE_SLUGS).optional(),
+    recipe_type: z.enum(RECIPE_TYPE_SLUGS).optional(),
   }),
   z.object({
     type: z.literal('technical_sheet'),
@@ -176,6 +239,18 @@ export const aiGenerateRequestSchema = z.discriminatedUnion('type', [
     type: z.literal('haccp'),
     zone: z.string().trim().min(1).max(120),
   }),
+  z.object({
+    type: z.literal('article'),
+    kind: z.enum(['technique', 'conseil']),
+    topic: z.string().trim().min(3).max(200),
+  }),
+  z.object({
+    type: z.literal('suggestions'),
+    season: z.enum(SEASON_VALUES).optional(),
+    cuisine: z.enum(CUISINE_STYLE_SLUGS).optional(),
+    recipe_type: z.enum(RECIPE_TYPE_SLUGS).optional(),
+    count: z.coerce.number().int().min(3).max(12).default(6),
+  }),
 ]);
 export type AiGenerateRequest = z.infer<typeof aiGenerateRequestSchema>;
 
@@ -184,7 +259,15 @@ export const aiImageRequestSchema = z.object({
   description: z.string().trim().max(1000).optional(),
   plating: z.string().trim().max(1000).optional(),
   category: z.string().trim().max(60).optional(),
-  folder: z.enum(['recipes', 'technical-sheets', 'menus', 'cards']),
+  /** Cuisine style (e.g. "bistronomique") to steer tableware and plating. */
+  cuisine: z.string().trim().max(60).optional(),
+  /** Main visible ingredients, so the photo shows this dish and nothing else. */
+  ingredients: z.array(z.string().trim().min(1).max(80)).max(10).optional(),
+  /** Visual description in English written by the text model (see photo_brief). */
+  brief: z.string().trim().max(600).optional(),
+  ambiance: z.enum(IMAGE_AMBIANCES).optional(),
+  aspect_ratio: z.enum(IMAGE_ASPECT_RATIOS).optional(),
+  folder: z.enum(['recipes', 'technical-sheets', 'menus', 'cards', 'articles', 'career', 'seasons']),
 });
 export type AiImageRequest = z.infer<typeof aiImageRequestSchema>;
 
@@ -210,3 +293,22 @@ export const publicSubmitSchema = z.discriminatedUnion('kind', [
   }),
 ]);
 export type PublicSubmitRequest = z.infer<typeof publicSubmitSchema>;
+
+/** Visitor engagement (no account): see the engage edge function. */
+export const engageRequestSchema = z.object({
+  recipe_id: z.uuid(),
+  visitor_id: z.uuid(),
+  event: z.enum(ENGAGEMENT_EVENTS),
+  rating: z.coerce.number().int().min(1).max(5).optional(),
+});
+export type EngageRequest = z.infer<typeof engageRequestSchema>;
+
+/** Newsletter double opt-in (Brevo). */
+export const newsletterRequestSchema = z.object({
+  email: z.email().max(254),
+  first_name: z.string().trim().max(80).optional(),
+  consent: z.literal(true),
+  website: z.string().max(0).optional(),
+  captchaToken: z.string().optional(),
+});
+export type NewsletterRequest = z.infer<typeof newsletterRequestSchema>;

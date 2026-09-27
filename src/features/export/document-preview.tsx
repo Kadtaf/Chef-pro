@@ -83,8 +83,8 @@ export function DocumentPreview({ document }: { document: PdfDocument }) {
         <h2 className="text-2xl font-bold text-neutral-900">{document.title}</h2>
         {document.subtitle && <p className="mt-1 text-neutral-600">{document.subtitle}</p>}
       </header>
-      {document.sections.map((section) => (
-        <section key={section.heading} className="space-y-3">
+      {document.sections.map((section, index) => (
+        <section key={`${index}-${section.heading}`} className="space-y-3">
           <h3 className="border-b border-neutral-100 pb-1 font-sans text-lg font-semibold text-primary-700">
             {section.heading}
           </h3>

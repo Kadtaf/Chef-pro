@@ -57,4 +57,4 @@ jobs:
         with:
           deno-version: v2.x
       - working-directory: supabase/functions
-        run: deno check ai-generate/index.ts ai-generate-image/index.ts public-submit/index.ts
+        run: deno check ai-generate/index.ts ai-generate-image/index.ts public-submit/index.ts engage/index.ts newsletter/index.ts

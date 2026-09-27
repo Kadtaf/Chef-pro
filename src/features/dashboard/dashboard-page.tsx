@@ -29,7 +29,8 @@ const ENTITY_LABELS: Record<string, { label: string; path?: string }> = {
   missions: { label: 'Mission', path: '/admin/missions' },
   revenues: { label: 'Encaissement', path: '/admin/revenues' },
   comments: { label: 'Avis', path: '/admin/comments' },
-  portfolio_items: { label: 'Portfolio', path: '/admin/portfolio' },
+  articles: { label: 'Article', path: '/admin/articles' },
+  career_experiences: { label: 'Parcours', path: '/admin/career' },
   services: { label: 'Service', path: '/admin/services' },
   contact_submissions: { label: 'Message', path: '/admin/messages' },
 };

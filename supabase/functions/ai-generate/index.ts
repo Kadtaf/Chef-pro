@@ -1,6 +1,6 @@
 import { aiGenerateRequestSchema, aiSchemas } from '../_shared/ai-schemas.ts';
-import { handler, HttpError, json, requireEnv } from '../_shared/http.ts';
-import { CHAT_MODEL, chatJson } from '../_shared/mistral.ts';
+import { CHAT_MODEL, chatJson, geminiKey } from '../_shared/gemini.ts';
+import { handler, HttpError, json } from '../_shared/http.ts';
 import { enforceAiQuota, logGeneration, requireAdmin } from '../_shared/supabase.ts';
 import { describeRequest, systemPrompt, userPrompt } from './prompts.ts';
 
@@ -19,16 +19,16 @@ Deno.serve(
   handler(async (req, body) => {
     const { user, admin } = await requireAdmin(req);
     const request = aiGenerateRequestSchema.parse(body);
+    const apiKey = geminiKey();
     await enforceAiQuota(admin, user.id);
 
-    const apiKey = requireEnv('MISTRAL_API_KEY');
     const schema = aiSchemas[request.type];
     const system = systemPrompt(request.type);
     const prompt = userPrompt(request);
 
     let lastIssue: unknown;
     for (const [attempt, temperature] of [0.5, 0.2].entries()) {
-      const { content, usage } = await chatJson(apiKey, {
+      const { content, usage, model } = await chatJson(apiKey, {
         system,
         user: attempt === 0 ? prompt : `${prompt}\n${RETRY_REMINDER}`,
         temperature,
@@ -53,7 +53,7 @@ Deno.serve(
         type: request.type,
         prompt: describeRequest(request),
         result: parsed.data,
-        model: CHAT_MODEL,
+        model,
         usage,
         status: 'success',
       });

@@ -83,6 +83,63 @@ export type Database = {
         }
         Relationships: []
       }
+      articles: {
+        Row: {
+          body: string
+          created_at: string
+          difficulty: string | null
+          excerpt: string
+          id: string
+          image_url: string | null
+          is_published: boolean
+          kind: string
+          position: number
+          published_at: string | null
+          reading_minutes: number
+          slug: string
+          tags: string[]
+          title: string
+          updated_at: string
+          video_url: string | null
+        }
+        Insert: {
+          body?: string
+          created_at?: string
+          difficulty?: string | null
+          excerpt?: string
+          id?: string
+          image_url?: string | null
+          is_published?: boolean
+          kind: string
+          position?: number
+          published_at?: string | null
+          reading_minutes?: number
+          slug: string
+          tags?: string[]
+          title: string
+          updated_at?: string
+          video_url?: string | null
+        }
+        Update: {
+          body?: string
+          created_at?: string
+          difficulty?: string | null
+          excerpt?: string
+          id?: string
+          image_url?: string | null
+          is_published?: boolean
+          kind?: string
+          position?: number
+          published_at?: string | null
+          reading_minutes?: number
+          slug?: string
+          tags?: string[]
+          title?: string
+          updated_at?: string
+          video_url?: string | null
+        }
+        Relationships: []
+      }
       card_section_items: {
         Row: {
           card_section_id: string
@@ -217,6 +274,66 @@ export type Database = {
           season?: string
           slug?: string
           title?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
+      career_experiences: {
+        Row: {
+          city: string | null
+          created_at: string
+          cuisine_types: string[]
+          end_year: number | null
+          establishment: string
+          id: string
+          image_prompt: string | null
+          image_url: string | null
+          is_published: boolean
+          missions: string[]
+          position: number
+          role: string
+          skills: string[]
+          start_year: number
+          summary: string
+          techniques: string[]
+          updated_at: string
+        }
+        Insert: {
+          city?: string | null
+          created_at?: string
+          cuisine_types?: string[]
+          end_year?: number | null
+          establishment: string
+          id?: string
+          image_prompt?: string | null
+          image_url?: string | null
+          is_published?: boolean
+          missions?: string[]
+          position?: number
+          role: string
+          skills?: string[]
+          start_year: number
+          summary?: string
+          techniques?: string[]
+          updated_at?: string
+        }
+        Update: {
+          city?: string | null
+          created_at?: string
+          cuisine_types?: string[]
+          end_year?: number | null
+          establishment?: string
+          id?: string
+          image_prompt?: string | null
+          image_url?: string | null
+          is_published?: boolean
+          missions?: string[]
+          position?: number
+          role?: string
+          skills?: string[]
+          start_year?: number
+          summary?: string
+          techniques?: string[]
           updated_at?: string
         }
         Relationships: []
@@ -660,6 +777,35 @@ export type Database = {
         }
         Relationships: []
       }
+      recipe_daily_stats: {
+        Row: {
+          day: string
+          likes: number
+          recipe_id: string
+          views: number
+        }
+        Insert: {
+          day?: string
+          likes?: number
+          recipe_id: string
+          views?: number
+        }
+        Update: {
+          day?: string
+          likes?: number
+          recipe_id?: string
+          views?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "recipe_daily_stats_recipe_id_fkey"
+            columns: ["recipe_id"]
+            isOneToOne: false
+            referencedRelation: "recipes"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       recipe_ingredients: {
         Row: {
           acides_gras_satures: number
@@ -725,6 +871,38 @@ export type Database = {
           },
         ]
       }
+      recipe_ratings: {
+        Row: {
+          created_at: string
+          rating: number
+          recipe_id: string
+          updated_at: string
+          visitor_id: string
+        }
+        Insert: {
+          created_at?: string
+          rating: number
+          recipe_id: string
+          updated_at?: string
+          visitor_id: string
+        }
+        Update: {
+          created_at?: string
+          rating?: number
+          recipe_id?: string
+          updated_at?: string
+          visitor_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "recipe_ratings_recipe_id_fkey"
+            columns: ["recipe_id"]
+            isOneToOne: false
+            referencedRelation: "recipes"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       recipe_steps: {
         Row: {
           created_at: string
@@ -760,16 +938,48 @@ export type Database = {
           },
         ]
       }
+      recipe_terms: {
+        Row: {
+          recipe_id: string
+          term_id: string
+        }
+        Insert: {
+          recipe_id: string
+          term_id: string
+        }
+        Update: {
+          recipe_id?: string
+          term_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "recipe_terms_recipe_id_fkey"
+            columns: ["recipe_id"]
+            isOneToOne: false
+            referencedRelation: "recipes"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "recipe_terms_term_id_fkey"
+            columns: ["term_id"]
+            isOneToOne: false
+            referencedRelation: "taxonomy_terms"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       recipes: {
         Row: {
           acides_gras_satures: number
           calories_per_serving: number
           category: string
+          chef_tips: string | null
           cook_time: number
           cost_per_serving: number
           created_at: string
           description: string | null
           difficulty: string | null
+          equipment: string[]
           fibres: number
           fruits_legumes_pct: number
           glucides: number
@@ -777,12 +987,16 @@ export type Database = {
           image_url: string | null
           is_featured: boolean
           is_published: boolean
+          likes_count: number
           lipides: number
           nutri_score: string | null
           plating: string | null
           portion_weight_g: number | null
           prep_time: number
           proteines: number
+          published_at: string | null
+          rating_avg: number
+          rating_count: number
           season: string | null
           sel: number
           servings: number
@@ -790,16 +1004,21 @@ export type Database = {
           sucres: number
           title: string
           updated_at: string
+          variations: string | null
+          views_count: number
+          wine_pairing: string | null
         }
         Insert: {
           acides_gras_satures?: number
           calories_per_serving?: number
           category: string
+          chef_tips?: string | null
           cook_time?: number
           cost_per_serving?: number
           created_at?: string
           description?: string | null
           difficulty?: string | null
+          equipment?: string[]
           fibres?: number
           fruits_legumes_pct?: number
           glucides?: number
@@ -807,12 +1026,16 @@ export type Database = {
           image_url?: string | null
           is_featured?: boolean
           is_published?: boolean
+          likes_count?: number
           lipides?: number
           nutri_score?: string | null
           plating?: string | null
           portion_weight_g?: number | null
           prep_time?: number
           proteines?: number
+          published_at?: string | null
+          rating_avg?: number
+          rating_count?: number
           season?: string | null
           sel?: number
           servings?: number
@@ -820,16 +1043,21 @@ export type Database = {
           sucres?: number
           title: string
           updated_at?: string
+          variations?: string | null
+          views_count?: number
+          wine_pairing?: string | null
         }
         Update: {
           acides_gras_satures?: number
           calories_per_serving?: number
           category?: string
+          chef_tips?: string | null
           cook_time?: number
           cost_per_serving?: number
           created_at?: string
           description?: string | null
           difficulty?: string | null
+          equipment?: string[]
           fibres?: number
           fruits_legumes_pct?: number
           glucides?: number
@@ -837,12 +1065,16 @@ export type Database = {
           image_url?: string | null
           is_featured?: boolean
           is_published?: boolean
+          likes_count?: number
           lipides?: number
           nutri_score?: string | null
           plating?: string | null
           portion_weight_g?: number | null
           prep_time?: number
           proteines?: number
+          published_at?: string | null
+          rating_avg?: number
+          rating_count?: number
           season?: string | null
           sel?: number
           servings?: number
@@ -850,6 +1082,9 @@ export type Database = {
           sucres?: number
           title?: string
           updated_at?: string
+          variations?: string | null
+          views_count?: number
+          wine_pairing?: string | null
         }
         Relationships: []
       }
@@ -896,6 +1131,33 @@ export type Database = {
             referencedColumns: ["id"]
           },
         ]
+      }
+      seasons: {
+        Row: {
+          description: string
+          image_url: string | null
+          months: number[]
+          name: string
+          position: number
+          slug: string
+        }
+        Insert: {
+          description?: string
+          image_url?: string | null
+          months: number[]
+          name: string
+          position: number
+          slug: string
+        }
+        Update: {
+          description?: string
+          image_url?: string | null
+          months?: number[]
+          name?: string
+          position?: number
+          slug?: string
+        }
+        Relationships: []
       }
       services: {
         Row: {
@@ -946,11 +1208,17 @@ export type Database = {
         Row: {
           address: string
           banner_url: string | null
+          chef_bio: string
+          chef_name: string
+          chef_portrait_url: string | null
+          chef_title: string
           created_at: string
+          education: string[]
           email: string
           facebook_url: string | null
           id: string
           instagram_url: string | null
+          languages: string[]
           linkedin_url: string | null
           logo_url: string | null
           phone: string
@@ -961,15 +1229,22 @@ export type Database = {
           site_description: string
           site_name: string
           updated_at: string
+          years_experience: number
         }
         Insert: {
           address?: string
           banner_url?: string | null
+          chef_bio?: string
+          chef_name?: string
+          chef_portrait_url?: string | null
+          chef_title?: string
           created_at?: string
+          education?: string[]
           email?: string
           facebook_url?: string | null
           id?: string
           instagram_url?: string | null
+          languages?: string[]
           linkedin_url?: string | null
           logo_url?: string | null
           phone?: string
@@ -980,15 +1255,22 @@ export type Database = {
           site_description?: string
           site_name?: string
           updated_at?: string
+          years_experience?: number
         }
         Update: {
           address?: string
           banner_url?: string | null
+          chef_bio?: string
+          chef_name?: string
+          chef_portrait_url?: string | null
+          chef_title?: string
           created_at?: string
+          education?: string[]
           email?: string
           facebook_url?: string | null
           id?: string
           instagram_url?: string | null
+          languages?: string[]
           linkedin_url?: string | null
           logo_url?: string | null
           phone?: string
@@ -999,6 +1281,40 @@ export type Database = {
           site_description?: string
           site_name?: string
           updated_at?: string
+          years_experience?: number
+        }
+        Relationships: []
+      }
+      taxonomy_terms: {
+        Row: {
+          created_at: string
+          description: string | null
+          icon: string | null
+          id: string
+          kind: string
+          name: string
+          position: number
+          slug: string
+        }
+        Insert: {
+          created_at?: string
+          description?: string | null
+          icon?: string | null
+          id?: string
+          kind: string
+          name: string
+          position?: number
+          slug: string
+        }
+        Update: {
+          created_at?: string
+          description?: string | null
+          icon?: string | null
+          id?: string
+          kind?: string
+          name?: string
+          position?: number
+          slug?: string
         }
         Relationships: []
       }
@@ -1226,21 +1542,119 @@ export type Database = {
         Args: { p_data: Json; p_table: unknown }
         Returns: string[]
       }
+      blog_stats: { Args: { p_days?: number }; Returns: Json }
       consume_rate_limit: {
         Args: { p_key: string; p_limit: number; p_window_seconds: number }
         Returns: boolean
       }
       dashboard_stats: { Args: never; Returns: Json }
       is_admin: { Args: never; Returns: boolean }
+      is_engagement_write: { Args: never; Returns: boolean }
+      normalize_text: { Args: { p_value: string }; Returns: string }
+      record_engagement: {
+        Args: {
+          p_event: string
+          p_rating?: number
+          p_recipe_id: string
+          p_visitor_id: string
+        }
+        Returns: Json
+      }
+      related_recipes: {
+        Args: { p_limit?: number; p_recipe_id: string }
+        Returns: {
+          acides_gras_satures: number
+          calories_per_serving: number
+          category: string
+          chef_tips: string | null
+          cook_time: number
+          cost_per_serving: number
+          created_at: string
+          description: string | null
+          difficulty: string | null
+          equipment: string[]
+          fibres: number
+          fruits_legumes_pct: number
+          glucides: number
+          id: string
+          image_url: string | null
+          is_featured: boolean
+          is_published: boolean
+          likes_count: number
+          lipides: number
+          nutri_score: string | null
+          plating: string | null
+          portion_weight_g: number | null
+          prep_time: number
+          proteines: number
+          published_at: string | null
+          rating_avg: number
+          rating_count: number
+          season: string | null
+          sel: number
+          servings: number
+          slug: string
+          sucres: number
+          title: string
+          updated_at: string
+          variations: string | null
+          views_count: number
+          wine_pairing: string | null
+        }[]
+        SetofOptions: {
+          from: "*"
+          to: "recipes"
+          isOneToOne: false
+          isSetofReturn: true
+        }
+      }
       save_card: { Args: { p_card: Json; p_sections: Json }; Returns: string }
       save_menu: { Args: { p_items: Json; p_menu: Json }; Returns: string }
       save_recipe: {
-        Args: { p_ingredients: Json; p_recipe: Json; p_steps: Json }
+        Args: {
+          p_ingredients: Json
+          p_recipe: Json
+          p_steps: Json
+          p_term_ids?: string[]
+        }
         Returns: string
       }
       save_technical_sheet: {
         Args: { p_ingredients: Json; p_sheet: Json; p_steps: Json }
         Returns: string
+      }
+      search_recipes: {
+        Args: {
+          p_limit?: number
+          p_offset?: number
+          p_query?: string
+          p_season?: string
+          p_sort?: string
+          p_type?: string
+        }
+        Returns: {
+          calories_per_serving: number
+          category: string
+          cook_time: number
+          description: string
+          difficulty: string
+          id: string
+          image_url: string
+          is_featured: boolean
+          likes_count: number
+          nutri_score: string
+          prep_time: number
+          published_at: string
+          rating_avg: number
+          rating_count: number
+          season: string
+          servings: number
+          slug: string
+          title: string
+          total_count: number
+          type_slugs: string[]
+          views_count: number
+        }[]
       }
       slugify: { Args: { p_value: string }; Returns: string }
       unique_slug: {

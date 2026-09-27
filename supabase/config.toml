@@ -21,3 +21,11 @@ verify_jwt = true
 # Public form endpoint (protected by validation, honeypot, captcha and rate limiting).
 [functions.public-submit]
 verify_jwt = false
+
+# Anonymous visitor engagement (views, favourites, ratings) — rate limited per IP.
+[functions.engage]
+verify_jwt = false
+
+# Newsletter double opt-in through Brevo.
+[functions.newsletter]
+verify_jwt = false

@@ -1,38 +1,50 @@
-import { ArrowRight, Award, ChefHat, Quote, Users } from 'lucide-react';
+import { ArrowRight, Quote } from 'lucide-react';
 import { Link } from 'react-router';
+import { ARTICLE_KINDS, usePublishedArticles } from '@/features/articles/api';
 import { usePublicReviews } from '@/features/comments/api';
-import { usePublishedPortfolio } from '@/features/portfolio/api';
-import { useFeaturedRecipes } from '@/features/recipes/api';
+import { useBlogRecipes, useFeaturedRecipes } from '@/features/recipes/api';
 import { RecipeCard } from '@/features/recipes/recipe-card';
 import { DEFAULT_SETTINGS, useSiteSettings } from '@/features/settings/api';
 import { usePublishedServices } from '@/features/services/api';
 import { ServiceIcon } from '@/features/services/service-icon';
-import { cn } from '@/shared/lib/cn';
+import { careerYears, usePublishedCareer } from '@/features/career/api';
+import { currentSeason, SEASON_WORDING, useSeasons, useTerms } from '@/features/taxonomy/api';
 import { formatCurrency } from '@/shared/lib/format';
 import { imageUrl } from '@/shared/lib/storage';
 import { Button } from '@/shared/ui/button';
+import { RecipeTypeIcon, SeasonIcon, ToqueIcon } from '@/shared/ui/culinary-icons';
+import { Reveal } from '@/shared/ui/reveal';
 import { Seo } from '@/shared/ui/seo';
 import { Container, CtaBanner, SectionHeading } from './components/sections';
 import { StarRating } from './components/star-rating';
 
 const HERO_IMAGE =
-  'https://images.pexels.com/photos/1267320/pexels-photo-1267320.jpeg?auto=compress&cs=tinysrgb&w=1920';
-const PORTFOLIO_FALLBACK =
-  'https://images.pexels.com/photos/2092906/pexels-photo-2092906.jpeg?auto=compress&cs=tinysrgb&w=600';
-
-const STATS = [
-  { value: '15+', label: "Années d'expérience" },
-  { value: '200+', label: 'Clients satisfaits' },
-  { value: '50+', label: 'Restaurants accompagnés' },
-];
+  'https://images.pexels.com/photos/3338497/pexels-photo-3338497.jpeg?auto=compress&cs=tinysrgb&w=2000';
+const CHEF_IMAGE = 'https://images.pexels.com/photos/3771120/pexels-photo-3771120.jpeg?auto=compress&cs=tinysrgb&w=900';
 
 export function Component() {
   const { data: settings } = useSiteSettings();
-  const { data: services = [] } = usePublishedServices();
-  const { data: recipes = [] } = useFeaturedRecipes(3);
-  const { data: reviews = [] } = usePublicReviews(3);
-  const { data: portfolio = [] } = usePublishedPortfolio({ featuredOnly: true, limit: 4 });
   const site = { ...DEFAULT_SETTINGS, ...settings };
+  const { data: featured = [] } = useFeaturedRecipes(3);
+  const recent = useBlogRecipes({ sort: 'recent' });
+  const { data: types = [] } = useTerms('type');
+  const { data: seasons = [] } = useSeasons();
+  const { data: techniques = [] } = usePublishedArticles('technique');
+  const { data: advice = [] } = usePublishedArticles('conseil');
+  const { data: services = [] } = usePublishedServices();
+  const { data: reviews = [] } = usePublicReviews(3);
+  const { data: career = [] } = usePublishedCareer();
+  const longestHeadRole = career
+    .filter((c) => /chef de cuisine/i.test(c.role))
+    .sort((a, b) => careerYears(b) - careerYears(a))[0];
+
+  const spotlight = featured.length >= 3 ? featured : (recent.data?.rows.slice(0, 3) ?? []);
+  const season = seasons.find((s) => s.slug === currentSeason());
+  const years = settings?.years_experience || 20;
+  const editorial = [
+    ...techniques.slice(0, 2).map((a) => ({ ...a, kind: 'technique' as const })),
+    ...advice.slice(0, 2).map((a) => ({ ...a, kind: 'conseil' as const })),
+  ];
 
   return (
     <div className="animate-fade-in">
@@ -46,251 +58,283 @@ export function Component() {
           description: site.seo_description,
           email: site.email,
           telephone: site.phone || undefined,
+          founder: settings?.chef_name
+            ? { '@type': 'Person', name: settings.chef_name, jobTitle: 'Chef de cuisine' }
+            : undefined,
           address: { '@type': 'PostalAddress', addressLocality: 'Bordeaux', addressCountry: 'FR' },
-          areaServed: 'Bordeaux',
+          areaServed: ['Bordeaux', 'Gironde'],
         }}
       />
 
-      <section className="relative flex min-h-[90vh] items-center overflow-hidden">
-        <img src={HERO_IMAGE} alt="" className="absolute inset-0 size-full object-cover" fetchPriority="high" />
-        <div className="absolute inset-0 bg-neutral-900/70 backdrop-blur-[2px]" />
-        <Container className="relative py-20">
+      {/* Hero */}
+      <section className="relative isolate flex min-h-[calc(100svh-5rem)] items-end overflow-hidden bg-neutral-950 text-cream-50">
+        <img src={HERO_IMAGE} alt="" className="absolute inset-0 -z-10 size-full object-cover" fetchPriority="high" />
+        <div className="absolute inset-0 -z-10 bg-linear-to-t from-neutral-950 via-neutral-950/60 to-neutral-950/10" />
+        <Container className="w-full pt-32 pb-16 md:pb-24">
           <div className="max-w-3xl">
-            <p className="mb-8 inline-flex items-center gap-2 rounded-full bg-white/10 px-4 py-2 text-sm text-white/90 backdrop-blur-sm">
-              <ChefHat className="size-4" aria-hidden />
-              Chef de cuisine freelance à Bordeaux
-            </p>
-            <h1 className="mb-6 text-4xl leading-tight font-bold text-white md:text-5xl lg:text-6xl">
-              Créez des expériences
-              <span className="block bg-linear-to-r from-primary-400 to-accent-400 bg-clip-text text-transparent">
-                gastronomiques inoubliables
-              </span>
+            <p className="eyebrow animate-slide-up text-secondary-400">Chef de cuisine · Bordeaux</p>
+            <h1 className="mb-8 animate-slide-up text-6xl leading-[0.95] font-medium [animation-delay:120ms] md:text-8xl">
+              L&apos;exigence d&apos;un chef,
+              <span className="block text-secondary-300 italic">la générosité de la table.</span>
             </h1>
-            <p className="mb-10 max-w-2xl text-lg leading-relaxed text-neutral-300 md:text-xl">
-              Expertise culinaire professionnelle pour restaurants, événements privés et consulting. Plus de 15 ans
-              d&apos;expérience au service de votre réussite.
+            <p className="mb-10 max-w-xl animate-slide-up text-lg text-neutral-300 [animation-delay:240ms] md:text-xl">
+              Plus de {years} ans de cuisine traditionnelle et semi-gastronomique. Des recettes de saison, des
+              techniques de chef et un savoir-faire au service de vos cuisines et de vos événements.
             </p>
-            <div className="flex flex-col gap-4 sm:flex-row">
-              <Button asChild size="lg">
-                <Link to="/contact">
-                  Demander un devis gratuit
+            <div className="flex animate-slide-up flex-col gap-4 [animation-delay:360ms] sm:flex-row">
+              <Button
+                asChild
+                size="lg"
+                className="rounded-full bg-secondary-500 text-neutral-950 hover:bg-secondary-400"
+              >
+                <Link to="/recettes">
+                  Découvrir les recettes
                   <ArrowRight />
                 </Link>
               </Button>
-              <Button asChild size="lg" variant="outline" className="border-white/30 text-white hover:bg-white/10">
-                <Link to="/portfolio">Voir mon portfolio</Link>
+              <Button
+                asChild
+                size="lg"
+                variant="outline"
+                className="rounded-full border-cream-50/40 text-cream-50 hover:bg-cream-50/10 hover:text-cream-50"
+              >
+                <Link to="/contact">Réserver le Chef</Link>
               </Button>
             </div>
-            <dl className="mt-16 grid max-w-md grid-cols-3 gap-8">
-              {STATS.map((stat) => (
-                <div key={stat.label} className="text-center">
-                  <dd className="font-display text-3xl font-bold text-white">{stat.value}</dd>
-                  <dt className="text-sm text-neutral-400">{stat.label}</dt>
-                </div>
-              ))}
-            </dl>
           </div>
         </Container>
       </section>
 
-      {services.length > 0 && (
-        <section className="bg-white py-24">
+      {/* Recipe types quick access */}
+      {types.length > 0 && (
+        <section className="border-b border-neutral-200 bg-cream-50 py-8">
           <Container>
-            <SectionHeading title="Mes services" subtitle="Des solutions culinaires sur mesure pour tous vos besoins" />
-            <ul className="grid grid-cols-1 gap-8 md:grid-cols-2 lg:grid-cols-4">
-              {services.slice(0, 4).map((service) => (
-                <li
-                  key={service.id}
-                  className="group rounded-xl border border-neutral-100 bg-white p-6 shadow-sm transition-shadow hover:shadow-lg"
-                >
-                  <div className="mb-6 flex size-14 items-center justify-center rounded-xl bg-linear-to-br from-primary-100 to-secondary-100 transition-transform group-hover:scale-110">
-                    <ServiceIcon category={service.category} className="size-7 text-primary-600" />
-                  </div>
-                  <h3 className="mb-3 text-xl font-semibold text-neutral-900">{service.title}</h3>
-                  <p className="mb-4 text-sm leading-relaxed text-neutral-600">{service.description}</p>
-                  {service.price !== null && (
-                    <p className="flex items-baseline gap-1 text-primary-600">
-                      <span className="font-display text-2xl font-bold">{formatCurrency(service.price)}</span>
-                      <span className="text-sm text-neutral-500">/{service.price_unit}</span>
-                    </p>
-                  )}
+            <ul className="flex scrollbar-none gap-3 overflow-x-auto pb-2">
+              {types.map((type) => (
+                <li key={type.id} className="shrink-0">
+                  <Link
+                    to={`/recettes?type=${type.slug}`}
+                    className="flex flex-col items-center gap-2 rounded-2xl px-4 py-3 text-center text-sm text-neutral-700 transition-colors hover:bg-primary-50 hover:text-primary-700"
+                  >
+                    <span className="flex size-14 items-center justify-center rounded-full border border-neutral-300 bg-white">
+                      <RecipeTypeIcon icon={type.icon ?? type.slug} className="size-6" />
+                    </span>
+                    {type.name}
+                  </Link>
                 </li>
               ))}
             </ul>
-            <p className="mt-12 text-center">
-              <Button asChild variant="outline">
-                <Link to="/services">Découvrir tous mes services</Link>
-              </Button>
-            </p>
           </Container>
         </section>
       )}
 
-      <section className="bg-linear-to-br from-neutral-50 to-neutral-100 py-24">
-        <Container className="grid grid-cols-1 items-center gap-16 lg:grid-cols-2">
-          <div className="order-2 lg:order-1">
-            <p className="mb-6 inline-flex items-center gap-2 rounded-full bg-primary-100 px-4 py-2 text-sm font-medium text-primary-700">
-              <ChefHat className="size-4" aria-hidden />À propos
-            </p>
-            <h2 className="section-title">Une passion au service de l&apos;excellence culinaire</h2>
-            <p className="mb-6 leading-relaxed text-neutral-600">
-              Chef de cuisine passionné avec plus de 15 ans d&apos;expérience dans des établissements gastronomiques
-              prestigieux, je mets mon expertise au service des professionnels de la restauration et des particuliers.
-            </p>
-            <p className="mb-8 leading-relaxed text-neutral-600">
-              De la création de menus à l&apos;optimisation des coûts matières, en passant par la formation de vos
-              équipes, je vous accompagne dans chaque aspect de votre projet culinaire.
-            </p>
-            <ul className="mb-8 flex flex-wrap gap-6">
-              <li className="flex items-center gap-3">
-                <span className="flex size-12 items-center justify-center rounded-lg bg-success-100">
-                  <Award className="size-6 text-success-600" aria-hidden />
-                </span>
-                <span>
-                  <span className="block font-semibold text-neutral-900">Expertise certifiée</span>
-                  <span className="text-sm text-neutral-500">Formation continue</span>
-                </span>
-              </li>
-              <li className="flex items-center gap-3">
-                <span className="flex size-12 items-center justify-center rounded-lg bg-primary-100">
-                  <Users className="size-6 text-primary-600" aria-hidden />
-                </span>
-                <span>
-                  <span className="block font-semibold text-neutral-900">Accompagnement</span>
-                  <span className="text-sm text-neutral-500">Personnalisé</span>
-                </span>
-              </li>
-            </ul>
-            <Button asChild>
-              <Link to="/a-propos">
-                En savoir plus
-                <ArrowRight />
-              </Link>
-            </Button>
-          </div>
-          <div className="relative order-1 lg:order-2">
-            <div className="aspect-4/3 overflow-hidden rounded-2xl shadow-2xl">
-              <img
-                src="https://images.pexels.com/photos/239581/pexels-photo-239581.jpeg?auto=compress&cs=tinysrgb&w=800"
-                alt="Chef en cuisine"
-                className="size-full object-cover"
-                loading="lazy"
-              />
-            </div>
-            <div className="absolute -right-4 -bottom-8 max-w-xs rounded-2xl bg-white p-6 shadow-xl sm:-right-8">
-              <p className="mb-4 flex items-center gap-4">
-                <span className="font-display text-4xl font-bold text-primary-600">15+</span>
-                <span className="text-sm text-neutral-600">années d&apos;expérience en cuisine gastronomique</span>
-              </p>
-              <StarRating rating={5} />
-            </div>
-          </div>
-        </Container>
-      </section>
-
-      {recipes.length > 0 && (
-        <section className="bg-white py-24">
+      {/* Spotlight recipes */}
+      {spotlight.length > 0 && (
+        <section className="py-24">
           <Container>
-            <div className="mb-12 flex flex-col items-start justify-between gap-4 md:flex-row md:items-end">
+            <div className="mb-14 flex flex-col items-start justify-between gap-6 md:flex-row md:items-end">
               <SectionHeading
-                title="Recettes en vedette"
-                subtitle="Découvrez mes créations culinaires"
+                eyebrow="Blog culinaire"
+                title={featured.length >= 3 ? 'À la une' : 'Les dernières recettes'}
+                subtitle="Des recettes de chef expliquées pas à pas, avec accords mets-vins et valeurs nutritionnelles."
                 align="left"
                 className="mb-0 md:mb-0"
               />
-              <Button asChild variant="outline">
-                <Link to="/recettes">Voir toutes les recettes</Link>
-              </Button>
+              <Link
+                to="/recettes"
+                className="inline-flex shrink-0 items-center gap-2 font-semibold text-primary-700 hover:underline"
+              >
+                Toutes les recettes
+                <ArrowRight className="size-4" aria-hidden />
+              </Link>
             </div>
-            <div className="grid grid-cols-1 gap-8 md:grid-cols-2 lg:grid-cols-3">
-              {recipes.map((recipe) => (
-                <RecipeCard key={recipe.id} recipe={recipe} />
+            <div className="grid grid-cols-1 gap-x-8 gap-y-12 sm:grid-cols-2 lg:grid-cols-3">
+              {spotlight.map((recipe, index) => (
+                <Reveal key={recipe.id} delay={index * 100}>
+                  <RecipeCard recipe={recipe} />
+                </Reveal>
               ))}
             </div>
           </Container>
         </section>
       )}
 
-      {reviews.length > 0 && (
-        <section className="bg-neutral-900 py-24">
-          <Container>
-            <div className="mb-16 text-center">
-              <h2 className="section-title text-white">Ce que disent mes clients</h2>
-              <p className="mx-auto section-subtitle text-neutral-400">
-                La satisfaction de mes clients est ma priorité
+      {/* Chef */}
+      <section className="overflow-hidden bg-neutral-950 py-24 text-cream-50">
+        <Container className="grid items-center gap-16 lg:grid-cols-2">
+          <Reveal className="relative">
+            <div className="absolute -inset-5 rounded-[2.5rem] border border-secondary-500/25" aria-hidden />
+            <img
+              src={imageUrl(settings?.chef_portrait_url, 900) ?? CHEF_IMAGE}
+              alt={settings?.chef_portrait_url ? `Portrait de ${settings.chef_name}` : 'Chef dressant une assiette'}
+              className="relative aspect-4/5 w-full rounded-4xl object-cover"
+              loading="lazy"
+            />
+          </Reveal>
+          <Reveal delay={120}>
+            <p className="eyebrow text-secondary-400">
+              <ToqueIcon size={16} /> Le Chef
+            </p>
+            <h2 className="mb-6 text-5xl font-medium md:text-6xl">{settings?.chef_name || 'Un chef de terrain'}</h2>
+            <p className="mb-8 text-lg leading-relaxed text-neutral-300">
+              {settings?.chef_bio ||
+                'Chef de cuisine expérimenté en restauration traditionnelle et semi-gastronomique, de la création des cartes au pilotage des équipes.'}
+            </p>
+            <dl className="mb-10 grid grid-cols-3 gap-6 border-y border-white/10 py-8">
+              <div>
+                <dd className="font-display text-5xl text-secondary-300">{years}+</dd>
+                <dt className="text-sm text-neutral-400">ans en cuisine</dt>
+              </div>
+              {longestHeadRole && (
+                <div>
+                  <dd className="font-display text-5xl text-secondary-300">{careerYears(longestHeadRole)}</dd>
+                  <dt className="text-sm text-neutral-400">
+                    ans chef · {longestHeadRole.establishment.replace(/^Restaurant /, '')}
+                  </dt>
+                </div>
+              )}
+              <div>
+                <dd className="font-display text-5xl text-secondary-300">10</dd>
+                <dt className="text-sm text-neutral-400">personnes encadrées</dt>
+              </div>
+            </dl>
+            <Button
+              asChild
+              variant="outline"
+              className="rounded-full border-secondary-400/60 text-secondary-200 hover:bg-secondary-500 hover:text-neutral-950"
+            >
+              <Link to="/a-propos">
+                Découvrir son parcours
+                <ArrowRight />
+              </Link>
+            </Button>
+          </Reveal>
+        </Container>
+      </section>
+
+      {/* Season */}
+      {season && (
+        <section className="relative overflow-hidden py-24">
+          <Container className="grid items-center gap-10 rounded-[2.5rem] bg-cream-100 p-8 md:p-14 lg:grid-cols-[1fr_auto]">
+            <div>
+              <p className="eyebrow">
+                <SeasonIcon season={season.slug} className="size-4" /> De saison
               </p>
+              <h2 className="mb-4 text-4xl text-neutral-900 md:text-5xl">
+                {SEASON_WORDING[season.slug]?.menu ?? 'Le menu de saison'} du Chef
+              </h2>
+              <p className="max-w-2xl text-lg text-neutral-600">{season.description}</p>
             </div>
+            <Button asChild size="lg" className="rounded-full">
+              <Link to={`/menus-de-saison?saison=${season.slug}`}>
+                Voir le menu de saison
+                <ArrowRight />
+              </Link>
+            </Button>
+          </Container>
+        </section>
+      )}
+
+      {/* Techniques & advice */}
+      {editorial.length > 0 && (
+        <section className="border-t border-neutral-200 py-24">
+          <Container>
+            <SectionHeading
+              eyebrow="Le savoir-faire"
+              title="Techniques & conseils du Chef"
+              subtitle="Les gestes et les secrets de la cuisine professionnelle, expliqués simplement."
+            />
+            <ul className="grid gap-px overflow-hidden rounded-3xl border border-neutral-200 bg-neutral-200 md:grid-cols-2 lg:grid-cols-4">
+              {editorial.map((article) => (
+                <li key={article.id} className="bg-cream-50">
+                  <Link
+                    to={`${ARTICLE_KINDS[article.kind].path}/${article.slug}`}
+                    className="group flex h-full flex-col p-8 transition-colors hover:bg-white"
+                  >
+                    <p className="mb-4 text-xs font-semibold tracking-[0.2em] text-secondary-700 uppercase">
+                      {ARTICLE_KINDS[article.kind].label}
+                    </p>
+                    <h3 className="mb-3 text-2xl text-neutral-900 group-hover:text-primary-700">{article.title}</h3>
+                    <p className="mb-6 line-clamp-3 text-sm text-neutral-600">{article.excerpt}</p>
+                    <span className="mt-auto inline-flex items-center gap-2 text-sm font-semibold text-primary-700">
+                      Lire
+                      <ArrowRight className="size-4 transition-transform group-hover:translate-x-1" aria-hidden />
+                    </span>
+                  </Link>
+                </li>
+              ))}
+            </ul>
+          </Container>
+        </section>
+      )}
+
+      {/* Services */}
+      {services.length > 0 && (
+        <section className="bg-cream-100 py-24">
+          <Container>
+            <SectionHeading
+              eyebrow="Prestations"
+              title="Le Chef à votre service"
+              subtitle="Remplacement, renfort de brigade, consulting, formation ou événement privé."
+            />
+            <ul className="grid grid-cols-1 gap-6 md:grid-cols-2 lg:grid-cols-4">
+              {services.slice(0, 4).map((service, index) => (
+                <Reveal
+                  as="li"
+                  key={service.id}
+                  delay={index * 80}
+                  className="group rounded-3xl bg-cream-50 p-8 ring-1 ring-neutral-200 transition-shadow hover:shadow-xl"
+                >
+                  <ServiceIcon category={service.category} className="mb-6 size-9 text-primary-700" />
+                  <h3 className="mb-3 text-2xl text-neutral-900">{service.title}</h3>
+                  <p className="mb-6 text-sm leading-relaxed text-neutral-600">{service.description}</p>
+                  {service.price !== null && (
+                    <p className="font-display text-2xl text-primary-700">
+                      {formatCurrency(service.price)}{' '}
+                      <span className="font-sans text-sm text-neutral-500">/ {service.price_unit}</span>
+                    </p>
+                  )}
+                </Reveal>
+              ))}
+            </ul>
+            <p className="mt-12 text-center">
+              <Button asChild variant="outline" className="rounded-full">
+                <Link to="/services">Toutes les prestations</Link>
+              </Button>
+            </p>
+          </Container>
+        </section>
+      )}
+
+      {/* Reviews */}
+      {reviews.length > 0 && (
+        <section className="py-24">
+          <Container>
+            <SectionHeading eyebrow="Ils m'ont fait confiance" title="Avis clients" />
             <ul className="grid grid-cols-1 gap-8 md:grid-cols-3">
               {reviews.map((review) => (
                 <li key={review.id}>
-                  <figure className="h-full rounded-2xl bg-neutral-800/50 p-8 backdrop-blur-sm">
-                    <Quote className="mb-6 size-10 text-primary-400/30" aria-hidden />
-                    <blockquote className="mb-6 leading-relaxed text-neutral-300">{review.content}</blockquote>
+                  <figure className="h-full rounded-3xl border border-neutral-200 bg-white p-8">
+                    <Quote className="mb-6 size-8 text-secondary-400" aria-hidden />
+                    <blockquote className="mb-6 font-display text-xl leading-relaxed text-neutral-800 italic">
+                      {review.content}
+                    </blockquote>
                     <figcaption className="flex items-center justify-between gap-4">
-                      <span className="flex items-center gap-3">
-                        <span className="flex size-12 items-center justify-center rounded-full bg-linear-to-br from-primary-500 to-secondary-500 font-semibold text-white">
-                          {review.author_name.charAt(0).toUpperCase()}
-                        </span>
-                        <span className="font-semibold text-white">{review.author_name}</span>
-                      </span>
+                      <span className="font-semibold text-neutral-900">{review.author_name}</span>
                       {review.rating && <StarRating rating={review.rating} size="sm" />}
                     </figcaption>
                   </figure>
                 </li>
               ))}
             </ul>
-            <p className="mt-12 text-center">
-              <Button asChild variant="outline" className="border-neutral-600 text-white hover:bg-white/10">
-                <Link to="/avis">Voir tous les avis</Link>
-              </Button>
-            </p>
-          </Container>
-        </section>
-      )}
-
-      {portfolio.length > 0 && (
-        <section className="bg-white py-24">
-          <Container>
-            <SectionHeading title="Portfolio" subtitle="Découvrez mes réalisations et projets culinaires" />
-            <ul className="grid grid-cols-2 gap-4 lg:grid-cols-4">
-              {portfolio.map((item, index) => (
-                <li key={item.id} className={cn(index === 0 && 'col-span-2 row-span-2')}>
-                  <Link to="/portfolio" className="group relative block size-full overflow-hidden rounded-xl">
-                    <img
-                      src={imageUrl(item.image_url, index === 0 ? 900 : 450) ?? PORTFOLIO_FALLBACK}
-                      alt={item.title}
-                      loading="lazy"
-                      className={cn(
-                        'size-full object-cover transition-transform duration-700 group-hover:scale-110',
-                        index === 0 ? 'aspect-square lg:aspect-auto' : 'aspect-square',
-                      )}
-                    />
-                    <span className="absolute inset-0 bg-linear-to-t from-neutral-900/80 via-neutral-900/20 to-transparent opacity-0 transition-opacity duration-300 group-hover:opacity-100 group-focus-visible:opacity-100">
-                      <span className="absolute inset-x-0 bottom-0 p-6">
-                        <span className="block font-display font-semibold text-white">{item.title}</span>
-                        <span className="text-sm text-neutral-300">{item.category}</span>
-                      </span>
-                    </span>
-                  </Link>
-                </li>
-              ))}
-            </ul>
-            <p className="mt-12 text-center">
-              <Button asChild>
-                <Link to="/portfolio">
-                  Voir tout le portfolio
-                  <ArrowRight />
-                </Link>
-              </Button>
-            </p>
           </Container>
         </section>
       )}
 
       <CtaBanner
-        title="Prêt à transformer votre projet culinaire ?"
-        text="Contactez-moi pour discuter de vos besoins et obtenir un devis personnalisé gratuit."
-        secondary={{ label: 'Voir mes tarifs', to: '/tarifs' }}
+        title="Donnons du goût à votre projet"
+        text="Parlez-moi de votre établissement ou de votre événement : je vous réponds sous 48 h."
+        secondary={{ label: 'Voir les tarifs', to: '/tarifs' }}
       />
     </div>
   );

@@ -1,4 +1,5 @@
 import type { AiGenerateRequest, AiGenerationType } from '../_shared/ai-schemas.ts';
+import { CUISINE_STYLE_SLUGS, RECIPE_TYPE_SLUGS } from '../_shared/vocabulary.ts';
 
 const BASE = `Tu es un chef cuisinier professionnel expert en gastronomie française, nutrition, HACCP et gestion de restaurant.
 Tu produis du contenu PROFESSIONNEL, RÉALISTE et directement exploitable en restauration en France.
@@ -26,7 +27,15 @@ const RECIPE_SHAPE = `{
   "fruits_legumes_pct": 40,
   "ingredients": [${INGREDIENT_SHAPE}],
   "steps": [{ "step_number": 1, "instruction": "Instruction précise avec temps et températures" }],
-  "plating": "Description du dressage"
+  "plating": "Description du dressage",
+  "equipment": ["Poêle en inox", "Chinois"],
+  "chef_tips": "2 à 4 conseils de chef précis et concrets",
+  "variations": "2 ou 3 variantes (produit de saison, version végétarienne…)",
+  "wine_pairing": "Accord mets-vins : appellation (de préférence de Bordeaux ou du Sud-Ouest), couleur et justification en une phrase",
+  "types": ["1 à 3 valeurs parmi ${RECIPE_TYPE_SLUGS.join('|')}"],
+  "techniques": ["snacker", "sauce émulsionnée"],
+  "cuisine": "${CUISINE_STYLE_SLUGS.join('|')}",
+  "photo_brief": "IN ENGLISH, 1 to 3 sentences describing exactly what is visible on the finished plate: main components and how they are cut and cooked, colours, textures, sauce, garnish, type of plate. Only elements present in this recipe."
 }`;
 
 const SYSTEM: Record<AiGenerationType, string> = {
@@ -34,7 +43,35 @@ const SYSTEM: Record<AiGenerationType, string> = {
 Génère une recette au format :
 ${RECIPE_SHAPE}
 ${INGREDIENT_RULES}
-Contraintes : 6 à 12 ingrédients, 5 à 10 étapes, "portion_weight_g" = poids d'une portion servie, "fruits_legumes_pct" = part de fruits, légumes et légumineuses (0-100).`,
+Contraintes : 6 à 12 ingrédients, 5 à 10 étapes, "portion_weight_g" = poids d'une portion servie, "fruits_legumes_pct" = part de fruits, légumes et légumineuses (0-100).
+"types" : 1 à 3 valeurs choisies UNIQUEMENT dans la liste proposée. "techniques" : 1 à 4 techniques culinaires réellement utilisées. "equipment" : le matériel nécessaire.
+Allergènes : déclare pour chaque ingrédient tous les allergènes réglementaires qu'il contient (farine = Gluten, beurre et crème = Lait, etc.).`,
+
+  article: `${BASE}
+Rédige un article pédagogique pour le blog d'un chef, au format :
+{
+  "title": "Titre clair et engageant",
+  "excerpt": "Résumé de 1 à 2 phrases",
+  "body": "Corps de l'article",
+  "difficulty": "facile|moyen|difficile",
+  "reading_minutes": 4,
+  "tags": ["3 à 5 mots-clés"]
+}
+Format du champ "body" (texte, pas de HTML ni de markdown gras autre que **mot**) :
+- paragraphes séparés par une ligne vide ;
+- intertitres commençant par "## " ;
+- listes à puces commençant par "- " ;
+- étapes numérotées commençant par "1. ", "2. "…
+Contraintes : 300 à 600 mots, ton expert et bienveillant, informations exactes (températures, temps, règles d'hygiène), aucun chiffre inventé.`,
+
+  suggestions: `${BASE}
+Propose des idées de recettes originales au format :
+{
+  "ideas": [
+    { "title": "string", "pitch": "Une phrase qui donne envie", "type": "${RECIPE_TYPE_SLUGS.join('|')}", "season": "printemps|ete|automne|hiver|all", "cuisine": "${CUISINE_STYLE_SLUGS.join('|')}", "key_ingredients": ["3 à 5 produits phares"] }
+  ]
+}
+Contraintes : des idées variées, réalisables en restaurant, fondées sur des produits de saison en France.`,
 
   technical_sheet: `${BASE}
 Génère une fiche technique de production au format :
@@ -100,9 +137,18 @@ export function systemPrompt(type: AiGenerationType): string {
 export function userPrompt(req: AiGenerateRequest): string {
   switch (req.type) {
     case 'recipe':
-      return req.prompt
-        ? `Recette : « ${req.prompt} », catégorie « ${req.category ?? 'Plat principal'} ».`
-        : `Recette gastronomique française originale, catégorie « ${req.category ?? 'Plat principal'} ».`;
+      return (
+        [
+          req.prompt
+            ? `Recette : « ${req.prompt} », catégorie « ${req.category ?? 'Plat principal'} »`
+            : `Recette gastronomique française originale, catégorie « ${req.category ?? 'Plat principal'} »`,
+          req.season && req.season !== 'all' && `produits de saison « ${req.season} »`,
+          req.recipe_type && `de type « ${req.recipe_type} »`,
+          req.cuisine && `style de cuisine « ${req.cuisine} »`,
+        ]
+          .filter(Boolean)
+          .join(', ') + '.'
+      );
     case 'technical_sheet':
       return req.prompt
         ? `Fiche technique : « ${req.prompt} », catégorie « ${req.category ?? 'Plat principal'} ».`
@@ -113,6 +159,21 @@ export function userPrompt(req: AiGenerateRequest): string {
       return `Carte ${req.category} pour la saison « ${req.season} ».`;
     case 'haccp':
       return `Checklist HACCP pour la zone « ${req.zone} ».`;
+    case 'article':
+      return req.kind === 'technique'
+        ? `Article de technique culinaire : « ${req.topic} ». Explique le principe, le matériel, les étapes et les erreurs à éviter.`
+        : `Conseil du chef : « ${req.topic} ». Donne des astuces concrètes et applicables en cuisine.`;
+    case 'suggestions':
+      return (
+        [
+          `Propose ${req.count} idées de recettes`,
+          req.season && `de saison « ${req.season} »`,
+          req.recipe_type && `de type « ${req.recipe_type} »`,
+          req.cuisine && `dans un style de cuisine « ${req.cuisine} »`,
+        ]
+          .filter(Boolean)
+          .join(', ') + '.'
+      );
   }
 }
 

@@ -1,4 +1,4 @@
-import { Outlet, createBrowserRouter } from 'react-router';
+import { Navigate, Outlet, createBrowserRouter } from 'react-router';
 import { RequireAdmin } from '@/features/auth/require-admin';
 import { PageLoader } from '@/shared/ui/feedback';
 import { RouteError } from './route-error';
@@ -23,9 +23,18 @@ export const router = createBrowserRouter([
               { path: 'a-propos', lazy: () => import('@/features/public-site/about-page') },
               { path: 'services', lazy: () => import('@/features/services/public-services-page') },
               { path: 'tarifs', lazy: () => import('@/features/services/public-pricing-page') },
-              { path: 'portfolio', lazy: () => import('@/features/portfolio/public-portfolio-page') },
+              // The portfolio was replaced by the culinary blog: keep old links working.
+              { path: 'portfolio', element: <Navigate to="/recettes" replace /> },
               { path: 'recettes', lazy: () => import('@/features/recipes/public-recipes-page') },
               { path: 'recettes/:slug', lazy: () => import('@/features/recipes/public-recipe-page') },
+              { path: 'favoris', lazy: () => import('@/features/recipes/favorites-page') },
+              { path: 'menus-de-saison', lazy: () => import('@/features/seasonal/seasonal-menus-page') },
+              { path: 'accords-mets-vins', lazy: () => import('@/features/recipes/wine-pairings-page') },
+              { path: 'techniques', lazy: () => import('@/features/articles/techniques-page') },
+              { path: 'techniques/:slug', lazy: () => import('@/features/articles/technique-page') },
+              { path: 'conseils', lazy: () => import('@/features/articles/conseils-page') },
+              { path: 'conseils/:slug', lazy: () => import('@/features/articles/conseil-page') },
+              { path: 'newsletter/confirmee', lazy: () => import('@/features/newsletter/confirmed-page') },
               { path: 'avis', lazy: () => import('@/features/comments/public-reviews-page') },
               { path: 'contact', lazy: () => import('@/features/messages/public-contact-page') },
               { path: 'mentions-legales', lazy: () => import('@/features/public-site/legal-page') },
@@ -88,7 +97,13 @@ export const router = createBrowserRouter([
                   { path: 'revenues', lazy: () => import('@/features/revenues/revenues-page') },
                   { path: 'messages', lazy: () => import('@/features/messages/messages-page') },
                   { path: 'comments', lazy: () => import('@/features/comments/comments-admin-page') },
-                  { path: 'portfolio', lazy: () => import('@/features/portfolio/portfolio-admin-page') },
+                  { path: 'taxonomy', lazy: () => import('@/features/taxonomy/taxonomy-admin-page') },
+                  { path: 'media', lazy: () => import('@/features/media/media-library-page') },
+                  { path: 'blog-stats', lazy: () => import('@/features/blog-stats/blog-stats-page') },
+                  { path: 'articles', lazy: () => import('@/features/articles/articles-admin-page') },
+                  { path: 'articles/new', lazy: () => import('@/features/articles/article-edit-page') },
+                  { path: 'articles/:id/edit', lazy: () => import('@/features/articles/article-edit-page') },
+                  { path: 'career', lazy: () => import('@/features/career/career-admin-page') },
                   { path: 'services', lazy: () => import('@/features/services/services-admin-page') },
                   { path: 'settings', lazy: () => import('@/features/settings/settings-page') },
                   { path: 'ai-studio', lazy: () => import('@/features/ai-studio/ai-studio-page') },

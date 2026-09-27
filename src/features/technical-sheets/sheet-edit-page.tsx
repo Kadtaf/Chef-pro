@@ -1,3 +1,4 @@
+import { visibleIngredients } from '@/shared/lib/image-brief';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { Save, Sparkles } from 'lucide-react';
 import { useEffect } from 'react';
@@ -71,12 +72,18 @@ function SheetForm({ initial }: { initial: SheetFormValues }) {
   });
 
   const onGenerateImage = async () => {
-    const { title, description, category } = getValues();
+    const { title, description, category, ingredients } = getValues();
     if (!title) {
       form.setError('title', { message: 'Saisissez un titre avant de générer une image' });
       return;
     }
-    const url = await generateImage.mutateAsync({ title, description, category, folder: 'technical-sheets' });
+    const url = await generateImage.mutateAsync({
+      title,
+      description,
+      category,
+      ingredients: visibleIngredients(ingredients),
+      folder: 'technical-sheets',
+    });
     setValue('image_url', url, { shouldDirty: true });
   };
 

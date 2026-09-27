@@ -1,3 +1,4 @@
+import { visibleIngredients } from '@/shared/lib/image-brief';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { Save, Sparkles } from 'lucide-react';
 import { useEffect } from 'react';
@@ -23,6 +24,8 @@ import { Checkbox, Field, Input, Select, Textarea } from '@/shared/ui/form';
 import { ImageField } from '@/shared/ui/image-field';
 import { PageHeader } from '@/shared/ui/layout';
 import { useRecipe, useSaveRecipe } from './api';
+import { EditorialFields } from './components/editorial-fields';
+import { TaxonomyPicker } from './components/taxonomy-picker';
 import {
   emptyRecipe,
   recipeFormSchema,
@@ -81,12 +84,19 @@ function RecipeForm({ initial }: { initial: RecipeFormValues }) {
   });
 
   const onGenerateImage = async () => {
-    const { title: name, description, plating, category } = getValues();
+    const { title: name, description, plating, category, ingredients } = getValues();
     if (!name) {
       form.setError('title', { message: 'Saisissez un titre avant de générer une image' });
       return;
     }
-    const url = await generateImage.mutateAsync({ title: name, description, plating, category, folder: 'recipes' });
+    const url = await generateImage.mutateAsync({
+      title: name,
+      description,
+      plating,
+      category,
+      ingredients: visibleIngredients(ingredients),
+      folder: 'recipes',
+    });
     setValue('image_url', url, { shouldDirty: true });
   };
 
@@ -150,6 +160,8 @@ function RecipeForm({ initial }: { initial: RecipeFormValues }) {
                 </Field>
               </div>
             </CardSection>
+
+            <TaxonomyPicker />
 
             <CardSection
               title="Visuel"
@@ -218,15 +230,12 @@ function RecipeForm({ initial }: { initial: RecipeFormValues }) {
             <IngredientsEditor />
             <StepsEditor />
 
-            <CardSection title="Dressage & publication">
-              <div className="space-y-5">
-                <Field label="Dressage" error={errors.plating?.message}>
-                  {(c) => <Textarea {...c} rows={3} {...register('plating')} />}
-                </Field>
-                <div className="flex flex-wrap gap-6">
-                  <Checkbox label="Publier sur le site" {...register('is_published')} />
-                  <Checkbox label="Mettre en vedette sur l'accueil" {...register('is_featured')} />
-                </div>
+            <EditorialFields />
+
+            <CardSection title="Publication">
+              <div className="flex flex-wrap gap-6">
+                <Checkbox label="Publier dans le blog" {...register('is_published')} />
+                <Checkbox label="Mettre à la une sur l'accueil" {...register('is_featured')} />
               </div>
             </CardSection>
           </div>

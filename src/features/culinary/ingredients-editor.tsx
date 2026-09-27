@@ -1,6 +1,8 @@
-import { ArrowUp, ChevronDown, Plus, Trash2 } from 'lucide-react';
+import { ArrowUp, ChevronDown, Plus, ShieldAlert, Trash2 } from 'lucide-react';
 import { useFieldArray, useFormContext, type FieldErrors } from 'react-hook-form';
+import { toast } from 'sonner';
 import { ALLERGENS, UNITS } from '@/shared/domain/constants';
+import { withDetectedAllergens } from '@/shared/lib/allergens';
 import { cn } from '@/shared/lib/cn';
 import { Button } from '@/shared/ui/button';
 import { CardSection } from '@/shared/ui/feedback';
@@ -22,19 +24,38 @@ const NUTRIENT_FIELDS = [
 
 /** Editable ingredient list. Nutrition values are for the quantity used. */
 export function IngredientsEditor() {
-  const { control, register, watch, setValue, formState } = useFormContext<FormWithIngredients>();
+  const { control, register, watch, setValue, getValues, formState } = useFormContext<FormWithIngredients>();
   const { fields, append, remove, move } = useFieldArray({ control, name: 'ingredients' });
   const errors = formState.errors.ingredients as FieldErrors<IngredientValues>[] | undefined;
+
+  /** Adds the allergens detected from ingredient names (never removes declared ones). */
+  const detectAll = () => {
+    let added = 0;
+    getValues('ingredients').forEach((ingredient, index) => {
+      const merged = withDetectedAllergens(ingredient);
+      if (merged.length !== ingredient.allergens.length) {
+        added += merged.length - ingredient.allergens.length;
+        setValue(`ingredients.${index}.allergens`, merged, { shouldDirty: true });
+      }
+    });
+    toast.success(added ? `${added} allergène(s) ajouté(s) — vérifiez-les` : 'Aucun allergène supplémentaire détecté');
+  };
 
   return (
     <CardSection
       title="Ingrédients"
       description="Saisissez les quantités totales de la recette ; la nutrition et le coût sont calculés automatiquement."
       actions={
-        <Button variant="subtle" size="sm" onClick={() => append(emptyIngredient())}>
-          <Plus />
-          Ajouter
-        </Button>
+        <div className="flex gap-2">
+          <Button variant="ghost" size="sm" onClick={detectAll} disabled={fields.length === 0}>
+            <ShieldAlert />
+            Détecter les allergènes
+          </Button>
+          <Button variant="subtle" size="sm" onClick={() => append(emptyIngredient())}>
+            <Plus />
+            Ajouter
+          </Button>
+        </div>
       }
     >
       {fields.length === 0 ? (

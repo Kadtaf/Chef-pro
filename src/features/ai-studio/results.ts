@@ -3,7 +3,18 @@
  * entity, reusing each feature's own mappers so generated content follows the
  * exact same rules (nutrition, costing, slugs) as manual input.
  */
-import type { AiCard, AiGenerationType, AiHaccp, AiMenu, AiRecipe, AiResult, AiTechnicalSheet } from '@ai-contract';
+import type {
+  AiArticle,
+  AiCard,
+  AiGenerationType,
+  AiHaccp,
+  AiMenu,
+  AiRecipe,
+  AiResult,
+  AiSuggestions,
+  AiTechnicalSheet,
+} from '@ai-contract';
+import type { ArticleKind } from '@/features/articles/api';
 import { saveCard } from '@/features/cards/api';
 import { cardPayloadFromAi } from '@/features/cards/schema';
 import { computeAggregates, ingredientFromRow } from '@/features/culinary/schema';
@@ -14,6 +25,7 @@ import { menuPayloadFromAi } from '@/features/menus/schema';
 import { saveRecipe } from '@/features/recipes/api';
 import { recipeFromAi, toRecipePayload } from '@/features/recipes/schema';
 import { saveSheet } from '@/features/technical-sheets/api';
+import type { Term } from '@/features/taxonomy/api';
 import { sheetAggregates, sheetFromAi, toSheetPayload } from '@/features/technical-sheets/schema';
 import {
   CARD_CATEGORY_LABELS,
@@ -22,7 +34,8 @@ import {
   SEASON_LABELS,
   type MenuCategory,
 } from '@/shared/domain/constants';
-import { formatCurrency, formatDuration, formatNumber } from '@/shared/lib/format';
+import { formatCurrency, formatDuration, formatNumber, slugify } from '@/shared/lib/format';
+import { parseRichText } from '@/shared/lib/rich-text';
 import { supabase } from '@/shared/lib/supabase';
 
 export type AnyAiResult = AiResult<AiGenerationType>;
@@ -77,9 +90,17 @@ function recipeDocument(ai: AiRecipe, imageUrl: string | null): PdfDocument {
         ],
       },
       { heading: 'Préparation', blocks: [{ kind: 'list', ordered: true, items: ai.steps.map((s) => s.instruction) }] },
-      ...(ai.plating ? [{ heading: 'Dressage', blocks: [{ kind: 'paragraph' as const, text: ai.plating }] }] : []),
+      ...optionalSection('Matériel', ai.equipment.join(' · ')),
+      ...optionalSection('Dressage', ai.plating),
+      ...optionalSection('Conseils du Chef', ai.chef_tips),
+      ...optionalSection('Variantes', ai.variations),
+      ...optionalSection('Accord mets-vins', ai.wine_pairing),
     ],
   };
+}
+
+function optionalSection(heading: string, text: string) {
+  return text ? [{ heading, blocks: [{ kind: 'paragraph' as const, text }] }] : [];
 }
 
 function sheetDocument(ai: AiTechnicalSheet, imageUrl: string | null): PdfDocument {
@@ -201,6 +222,39 @@ function haccpDocument(ai: AiHaccp): PdfDocument {
   };
 }
 
+function suggestionsDocument(ai: AiSuggestions): PdfDocument {
+  return {
+    title: 'Idées de recettes',
+    badges: [`${ai.ideas.length} idées`],
+    sections: ai.ideas.map((idea) => ({
+      heading: idea.title,
+      blocks: [
+        { kind: 'paragraph' as const, text: idea.pitch },
+        ...(idea.key_ingredients.length
+          ? [{ kind: 'paragraph' as const, text: `Produits clés : ${idea.key_ingredients.join(', ')}` }]
+          : []),
+      ],
+    })),
+  };
+}
+
+function articleDocument(ai: AiArticle, imageUrl: string | null): PdfDocument {
+  const sections: PdfDocument['sections'] = [{ heading: 'Introduction', blocks: [] }];
+  for (const block of parseRichText(ai.body)) {
+    const current = sections.at(-1)!;
+    if (block.type === 'h2' || block.type === 'h3') sections.push({ heading: block.text, blocks: [] });
+    else if ('items' in block) current.blocks.push({ kind: 'list', ordered: block.type === 'ol', items: block.items });
+    else current.blocks.push({ kind: 'paragraph', text: block.text });
+  }
+  return {
+    title: ai.title,
+    subtitle: ai.excerpt,
+    badges: [`${ai.reading_minutes} min de lecture`, ...(ai.difficulty ? [DIFFICULTY_LABELS[ai.difficulty]] : [])],
+    imageUrl,
+    sections: sections.filter((section) => section.blocks.length > 0),
+  };
+}
+
 export function aiResultToDocument(type: AiGenerationType, result: AnyAiResult, imageUrl: string | null): PdfDocument {
   switch (type) {
     case 'recipe':
@@ -213,19 +267,34 @@ export function aiResultToDocument(type: AiGenerationType, result: AnyAiResult, 
       return cardDocument(result as AiCard, imageUrl);
     case 'haccp':
       return haccpDocument(result as AiHaccp);
+    case 'suggestions':
+      return suggestionsDocument(result as AiSuggestions);
+    case 'article':
+      return articleDocument(result as AiArticle, imageUrl);
   }
 }
+
+export type SaveOptions = {
+  menuStyle?: MenuCategory;
+  /** Taxonomy used to classify generated recipes in the blog. */
+  terms?: Term[];
+  /** Publishes the recipe in the blog right away instead of saving a draft. */
+  publish?: boolean;
+  articleKind?: ArticleKind;
+};
 
 /** Persists an AI result and returns the admin page of the created entity. */
 export async function saveAiResult(
   type: AiGenerationType,
   result: AnyAiResult,
   imageUrl: string | null,
-  options: { menuStyle?: MenuCategory } = {},
+  options: SaveOptions = {},
 ): Promise<string> {
   switch (type) {
-    case 'recipe':
-      return `/admin/recipes/${await saveRecipe(toRecipePayload(recipeFromAi(result as AiRecipe, imageUrl)))}`;
+    case 'recipe': {
+      const values = { ...recipeFromAi(result as AiRecipe, imageUrl, options.terms), is_published: !!options.publish };
+      return `/admin/recipes/${await saveRecipe(toRecipePayload(values))}`;
+    }
     case 'technical_sheet':
       return `/admin/technical-sheets/${await saveSheet(toSheetPayload(sheetFromAi(result as AiTechnicalSheet, imageUrl)))}`;
     case 'menu':
@@ -241,6 +310,29 @@ export async function saveAiResult(
       if (error) throw error;
       return `/admin/haccp/${data.id}`;
     }
+    case 'article': {
+      const ai = result as AiArticle;
+      const { data, error } = await supabase
+        .from('articles')
+        .insert({
+          kind: options.articleKind ?? 'technique',
+          title: ai.title,
+          slug: slugify(ai.title),
+          excerpt: ai.excerpt,
+          body: ai.body,
+          difficulty: ai.difficulty,
+          reading_minutes: ai.reading_minutes,
+          tags: ai.tags,
+          image_url: imageUrl,
+          is_published: false,
+        })
+        .select('id')
+        .single();
+      if (error) throw error;
+      return `/admin/articles/${data.id}/edit`;
+    }
+    case 'suggestions':
+      throw new Error('Les idées ne sont pas enregistrées : générez d’abord la recette.');
   }
 }
 

@@ -24,11 +24,11 @@
     "functions:deploy": "supabase functions deploy",
     "prepare": "husky",
     "prebuild": "node scripts/generate-sitemap.mjs",
-    "functions:check": "cd supabase/functions && npx -y deno check ai-generate/index.ts ai-generate-image/index.ts public-submit/index.ts"
+    "functions:check": "cd supabase/functions && npx -y deno check ai-generate/index.ts ai-generate-image/index.ts public-submit/index.ts engage/index.ts newsletter/index.ts"
   },
   "dependencies": {
-    "@fontsource-variable/inter": "^5.3.0",
-    "@fontsource-variable/playfair-display": "^5.3.0",
+    "@fontsource-variable/cormorant-garamond": "^5.3.0",
+    "@fontsource-variable/manrope": "^5.3.0",
     "@hookform/resolvers": "^5.9.1",
     "@sentry/react": "^11.0.0",
     "@supabase/supabase-js": "^2.117.2",
