@@ -1,178 +1,63 @@
-import "jsr:@supabase/functions-js/edge-runtime.d.ts";
+import { aiImageRequestSchema, type AiImageRequest } from '../_shared/ai-schemas.ts';
+import { handler, json, requireEnv } from '../_shared/http.ts';
+import { generateImage } from '../_shared/mistral.ts';
+import { enforceAiQuota, logGeneration, requireAdmin } from '../_shared/supabase.ts';
 
-declare const Deno: {
-    env: { get(key: string): string | undefined };
-    serve(handler: (req: Request) => Response | Promise<Response>): void;
-};
-const corsHeaders = {
-    "Access-Control-Allow-Origin": "*",
-    "Access-Control-Allow-Methods": "POST, OPTIONS",
-    "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
-    "Content-Type": "application/json",
-};
+const BUCKET = 'ai-images';
 
-type ImageRequestBody = {
-    title: string;
-    description?: string;
-    plating?: string;
-    category?: string;
-};
+function buildPrompt({ title, description, plating, category }: AiImageRequest): string {
+  return [
+    'Photographie culinaire professionnelle, ultra réaliste, style éditorial haut de gamme, lumière naturelle douce.',
+    `Sujet : ${title}.`,
+    category && `Catégorie : ${category}.`,
+    description && `Description : ${description}.`,
+    plating && `Dressage : ${plating}.`,
+    'Le plat est le sujet principal, cadrage serré, fond sobre, aucun texte ni logo.',
+  ]
+    .filter(Boolean)
+    .join(' ');
+}
 
-function jsonResponse(body: unknown, status = 200) {
-    return new Response(JSON.stringify(body), {
-        status,
-        headers: corsHeaders,
+function slugify(value: string): string {
+  return value
+    .toLowerCase()
+    .normalize('NFD')
+    .replace(/[\u0300-\u036F]/g, '')
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/(^-|-$)/g, '')
+    .slice(0, 80);
+}
+
+Deno.serve(
+  handler(async (req, body) => {
+    const { user, admin } = await requireAdmin(req);
+    const request = aiImageRequestSchema.parse(body);
+    await enforceAiQuota(admin, user.id);
+
+    const prompt = buildPrompt(request);
+    const bytes = await generateImage(requireEnv('MISTRAL_API_KEY'), requireEnv('MISTRAL_IMAGE_AGENT_ID'), prompt);
+
+    const path = `${request.folder}/${slugify(request.title)}-${crypto.randomUUID()}.png`;
+    const { error } = await admin.storage.from(BUCKET).upload(path, bytes, {
+      contentType: 'image/png',
+      cacheControl: '31536000',
+      upsert: false,
     });
-}
+    if (error) throw error;
 
-function buildImagePrompt({ title, description, plating, category }: ImageRequestBody) {
-    return [
-        "Génère une image culinaire fidèle au brief suivant.",
-        `Plat demandé : ${title}.`,
-        category ? `Catégorie : ${category}.` : "",
-        description ? `Description : ${description}.` : "",
-        plating ? `Dressage souhaité : ${plating}.` : "",
-        "Le plat doit rester le sujet principal.",
-        "Rendu attendu : photographie culinaire premium, ultra réaliste, élégante et gastronomique.",
-        "Éviter tout élément non demandé ou incohérent."
-    ]
-        .filter(Boolean)
-        .join(" ");
-}
+    const {
+      data: { publicUrl },
+    } = admin.storage.from(BUCKET).getPublicUrl(path);
 
-async function startConversation(apiKey: string, agentId: string, inputs: string) {
-    const response = await fetch("https://api.mistral.ai/v1/conversations", {
-        method: "POST",
-        headers: {
-            "Authorization": `Bearer ${apiKey}`,
-            "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-            agent_id: agentId,
-            inputs,
-        }),
-    });
-
-    const raw = await response.text();
-
-    if (!response.ok) {
-        throw new Error(`Mistral conversation error: ${response.status} - ${raw}`);
-    }
-
-    return JSON.parse(raw);
-}
-
-function extractFileId(payload: any): string | null {
-    const outputs = payload?.outputs;
-    if (!Array.isArray(outputs) || outputs.length === 0) return null;
-
-    for (const output of outputs) {
-        const content = output?.content;
-        if (!Array.isArray(content)) continue;
-
-        for (const chunk of content) {
-            if (chunk?.file_id) return chunk.file_id;
-            if (chunk?.type === "tool_file" && chunk?.file_id) return chunk.file_id;
-            if (chunk?.type === "file" && chunk?.file_id) return chunk.file_id;
-        }
-    }
-
-    return null;
-}
-
-async function downloadFileAsBase64(apiKey: string, fileId: string) {
-    const response = await fetch(`https://api.mistral.ai/v1/files/${fileId}/content`, {
-        method: "GET",
-        headers: {
-            "Authorization": `Bearer ${apiKey}`,
-        },
+    await logGeneration(admin, {
+      userId: user.id,
+      type: 'image',
+      prompt,
+      result: { path, publicUrl },
+      model: 'mistral-image-agent',
+      status: 'success',
     });
 
-    if (!response.ok) {
-        const raw = await response.text();
-        throw new Error(`Mistral file download error: ${response.status} - ${raw}`);
-    }
-
-    const arrayBuffer = await response.arrayBuffer();
-    const bytes = new Uint8Array(arrayBuffer);
-
-    let binary = "";
-    for (let i = 0; i < bytes.length; i++) {
-        binary += String.fromCharCode(bytes[i]);
-    }
-
-    return btoa(binary);
-}
-
-Deno.serve(async (req) => {
-    if (req.method === "OPTIONS") {
-        return new Response("ok", {
-            status: 200,
-            headers: corsHeaders,
-        });
-    }
-
-    if (req.method !== "POST") {
-        return jsonResponse({ error: "Method not allowed" }, 405);
-    }
-
-    try {
-        const mistralApiKey = Deno.env.get("MISTRAL_API_KEY");
-        const mistralImageAgentId = Deno.env.get("MISTRAL_IMAGE_AGENT_ID");
-
-        if (!mistralApiKey) {
-            return jsonResponse({ error: "MISTRAL_API_KEY is not configured" }, 500);
-        }
-
-        if (!mistralImageAgentId) {
-            return jsonResponse({ error: "MISTRAL_IMAGE_AGENT_ID is not configured" }, 500);
-        }
-
-        const body = (await req.json()) as ImageRequestBody;
-
-        if (!body?.title?.trim()) {
-            return jsonResponse({ error: "title is required" }, 400);
-        }
-
-        const prompt = buildImagePrompt(body);
-
-        const conversation = await startConversation(
-            mistralApiKey,
-            mistralImageAgentId,
-            prompt,
-        );
-
-        const fileId = extractFileId(conversation);
-
-        if (!fileId) {
-            return jsonResponse(
-                {
-                    error: "No generated image file_id returned by Mistral",
-                    raw: conversation,
-                },
-                500,
-            );
-        }
-
-        const imageBase64 = await downloadFileAsBase64(mistralApiKey, fileId);
-
-        return jsonResponse({
-            success: true,
-            imageBase64,
-            mimeType: "image/png",
-            prompt,
-            provider: "mistral",
-            fileId,
-        });
-    } catch (error) {
-        const message = error instanceof Error ? error.message : "Unknown server error";
-
-        return jsonResponse(
-            {
-                error: "Unhandled function error",
-                details: message,
-            },
-            500,
-        );
-    }
-});
+    return json(req, { url: publicUrl, path });
+  }),
+);

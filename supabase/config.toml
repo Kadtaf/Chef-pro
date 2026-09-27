@@ -1,5 +1,23 @@
+# Supabase CLI configuration (applies to local development; mirror the
+# [auth] settings in the hosted dashboard: Authentication > Providers/Settings).
+project_id = "chef-pro"
+
+[auth]
+site_url = "http://localhost:5173"
+additional_redirect_urls = ["http://localhost:5173"]
+# Back-office accounts are created by an administrator only.
+enable_signup = false
+
+[auth.email]
+enable_signup = false
+
+# Admin-only functions: the platform verifies the JWT, the function verifies the role.
 [functions.ai-generate]
-verify_jwt = false
+verify_jwt = true
 
 [functions.ai-generate-image]
+verify_jwt = true
+
+# Public form endpoint (protected by validation, honeypot, captcha and rate limiting).
+[functions.public-submit]
 verify_jwt = false
