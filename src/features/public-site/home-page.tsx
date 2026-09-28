@@ -17,10 +17,10 @@ import { Reveal } from '@/shared/ui/reveal';
 import { Seo } from '@/shared/ui/seo';
 import { Container, CtaBanner, SectionHeading } from './components/sections';
 import { StarRating } from './components/star-rating';
+import { CHEF_PLACEHOLDER_HOME } from './images';
 
 const HERO_IMAGE =
   'https://images.pexels.com/photos/3338497/pexels-photo-3338497.jpeg?auto=compress&cs=tinysrgb&w=2000';
-const CHEF_IMAGE = 'https://images.pexels.com/photos/3771120/pexels-photo-3771120.jpeg?auto=compress&cs=tinysrgb&w=900';
 
 export function Component() {
   const { data: settings } = useSiteSettings();
@@ -165,8 +165,8 @@ export function Component() {
           <Reveal className="relative">
             <div className="absolute -inset-5 rounded-[2.5rem] border border-secondary-500/25" aria-hidden />
             <img
-              src={imageUrl(settings?.chef_portrait_url, 900) ?? CHEF_IMAGE}
-              alt={settings?.chef_portrait_url ? `Portrait de ${settings.chef_name}` : 'Chef dressant une assiette'}
+              src={imageUrl(settings?.chef_portrait_url, 900) ?? CHEF_PLACEHOLDER_HOME}
+              alt={settings?.chef_portrait_url ? `Portrait de ${settings.chef_name}` : 'Cuisinier en plein service'}
               className="relative aspect-4/5 w-full rounded-4xl object-cover"
               loading="lazy"
             />

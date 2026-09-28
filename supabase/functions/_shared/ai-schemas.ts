@@ -178,14 +178,40 @@ export const aiSuggestionsSchema = z.object({
     .min(1),
 });
 
+/**
+ * Models sometimes return the article body as a list of paragraphs or as
+ * sections ({ heading, content }); both are turned into the rich-text format.
+ */
+function richTextFromAny(value: unknown): unknown {
+  if (typeof value === 'string' || value == null) return value;
+  if (Array.isArray(value)) return value.map(richTextFromAny).filter(Boolean).join('\n\n');
+  if (typeof value === 'object') {
+    const section = value as Record<string, unknown>;
+    const heading = section.heading ?? section.title ?? section.titre;
+    const content = section.content ?? section.body ?? section.text ?? section.paragraphs ?? section.items;
+    if (heading !== undefined || content !== undefined)
+      return [typeof heading === 'string' ? `## ${heading}` : '', richTextFromAny(content)]
+        .filter(Boolean)
+        .join('\n\n');
+    return Object.values(section).map(richTextFromAny).filter(Boolean).join('\n\n');
+  }
+  return String(value);
+}
+
 export const aiArticleSchema = z.object({
   title: z.string().trim().min(1),
   excerpt: text,
   /** Rich text: "## " headings, "- " bullets, "1. " ordered steps, blank-line paragraphs. */
-  body: z.string().trim().min(200),
+  body: z.preprocess(richTextFromAny, z.string().trim().min(200)),
   difficulty: z.enum(DIFFICULTY_VALUES).nullable().catch(null),
   reading_minutes: z.coerce.number().int().min(1).max(30).catch(3),
   tags: z.array(z.string().trim().min(1)).catch([]),
+  /** English description of the illustration (gesture, produce, utensils) for the photo model. */
+  photo_brief: z
+    .string()
+    .trim()
+    .transform((value) => value.slice(0, 600))
+    .catch(''),
 });
 
 export const aiSchemas = {

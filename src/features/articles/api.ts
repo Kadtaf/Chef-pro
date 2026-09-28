@@ -1,4 +1,5 @@
 import { useQuery } from '@tanstack/react-query';
+import type { AiImageRequest } from '@ai-contract';
 import { createCrud } from '@/shared/lib/crud';
 import { supabase } from '@/shared/lib/supabase';
 import type { Tables } from '@/shared/types/database';
@@ -20,6 +21,26 @@ export const ARTICLE_KINDS: Record<ArticleKind, { label: string; plural: string;
     intro: 'Astuces, secrets et méthodes de cuisine, tirés de vingt ans de service.',
   },
 };
+
+/**
+ * Photo brief for an article: the technique's key gesture, or the advice's
+ * subject. Used by the editor, the AI Studio and the bulk "missing photos" action.
+ */
+export function articleImageRequest(article: {
+  title: string;
+  excerpt?: string | null;
+  kind?: string | null;
+  photo_brief?: string | null;
+}): AiImageRequest {
+  return {
+    title: article.title.slice(0, 200),
+    description: article.excerpt?.slice(0, 1000) || undefined,
+    brief: article.photo_brief?.slice(0, 600) || undefined,
+    category: article.kind === 'conseil' ? 'Conseil du Chef' : 'Technique culinaire',
+    ambiance: 'editorial',
+    folder: 'articles',
+  };
+}
 
 export const articlesCrud = createCrud('articles', {
   label: 'Article',

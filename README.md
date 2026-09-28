@@ -7,7 +7,7 @@ Site vitrine, blog culinaire et back-office d'un chef de cuisine freelance : blo
 | Front         | React 19, React Router 8 (data mode, routes lazy), TypeScript 6, Vite 8, Tailwind CSS 4, Radix UI  |
 | Données       | TanStack Query 5, supabase-js 2, React Hook Form + Zod 4                                           |
 | Back-end      | Supabase : Postgres (RLS), Auth, Storage, Edge Functions (Deno)                                    |
-| IA            | Google Gemini Flash (texte) et Stability AI (photos, Stable Image Core) via edge functions         |
+| IA            | Texte : Gemini → Groq → Cloudflare ; photos : Stability → Cloudflare → Hugging Face (bascule auto) |
 | Qualité       | Vitest (unitaires + SQL sur PGlite), Playwright (E2E), ESLint (type-aware + a11y), Prettier, Husky |
 | Observabilité | Sentry (optionnel, chargé à la demande)                                                            |
 

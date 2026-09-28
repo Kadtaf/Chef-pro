@@ -13,7 +13,7 @@ import { ARTICLE_KINDS, usePublishedArticle, usePublishedArticles, videoEmbedUrl
 
 const HERO_IMAGES: Record<ArticleKind, string> = {
   technique: 'https://images.pexels.com/photos/3298637/pexels-photo-3298637.jpeg?auto=compress&cs=tinysrgb&w=1920',
-  conseil: 'https://images.pexels.com/photos/4252137/pexels-photo-4252137.jpeg?auto=compress&cs=tinysrgb&w=1920',
+  conseil: 'https://images.pexels.com/photos/1435904/pexels-photo-1435904.jpeg?auto=compress&cs=tinysrgb&w=1920',
 };
 
 export function ArticlesListPage({ kind }: { kind: ArticleKind }) {

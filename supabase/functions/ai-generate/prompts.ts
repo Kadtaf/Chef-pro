@@ -4,6 +4,7 @@ import { CUISINE_STYLE_SLUGS, RECIPE_TYPE_SLUGS } from '../_shared/vocabulary.ts
 const BASE = `Tu es un chef cuisinier professionnel expert en gastronomie française, nutrition, HACCP et gestion de restaurant.
 Tu produis du contenu PROFESSIONNEL, RÉALISTE et directement exploitable en restauration en France.
 Tu réponds UNIQUEMENT avec un objet JSON valide (pas de markdown, pas de texte autour).
+Dans les valeurs texte, écris chaque retour à la ligne sous la forme \\n et chaque guillemet droit sous la forme \\" ; préfère les guillemets français « ».
 Tous les champs du schéma sont obligatoires ; si une valeur est incertaine, donne une estimation réaliste.`;
 
 const INGREDIENT_RULES = `Règles pour chaque ingrédient :
@@ -55,7 +56,8 @@ Rédige un article pédagogique pour le blog d'un chef, au format :
   "body": "Corps de l'article",
   "difficulty": "facile|moyen|difficile",
   "reading_minutes": 4,
-  "tags": ["3 à 5 mots-clés"]
+  "tags": ["3 à 5 mots-clés"],
+  "photo_brief": "IN ENGLISH, 1 to 2 sentences describing the ideal illustration photo: the key gesture or result of the technique, the produce and utensils visible, in a professional kitchen. No people's faces."
 }
 Format du champ "body" (texte, pas de HTML ni de markdown gras autre que **mot**) :
 - paragraphes séparés par une ligne vide ;

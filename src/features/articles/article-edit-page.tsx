@@ -1,8 +1,8 @@
 import { zodResolver } from '@hookform/resolvers/zod';
-import { Save, Sparkles, Wand2 } from 'lucide-react';
+import { ImageOff, Save, Sparkles, Wand2 } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { useForm, useWatch } from 'react-hook-form';
-import { useNavigate, useParams } from 'react-router';
+import { useLocation, useNavigate, useParams } from 'react-router';
 import { z } from 'zod';
 import { generateContent, useGenerateImage } from '@/features/ai-studio/api';
 import { DIFFICULTY_LABELS, DIFFICULTY_VALUES } from '@/shared/domain/constants';
@@ -16,7 +16,7 @@ import { ImageField } from '@/shared/ui/image-field';
 import { PageHeader } from '@/shared/ui/layout';
 import { RichText } from '@/shared/ui/rich-text';
 import { toast } from 'sonner';
-import { ARTICLE_KINDS, articlesCrud, videoEmbedUrl, type Article } from './api';
+import { ARTICLE_KINDS, articleImageRequest, articlesCrud, videoEmbedUrl, type Article } from './api';
 
 const schema = z.object({
   kind: z.enum(['technique', 'conseil']),
@@ -39,6 +39,9 @@ const schema = z.object({
 type Input = z.input<typeof schema>;
 type Values = z.output<typeof schema>;
 
+/** Draft handed over by the AI Studio ("Ajuster dans l'éditeur"). */
+export type ArticleDraft = Partial<Values> & { photo_brief?: string };
+
 const toValues = (a?: Article): Values => ({
   kind: (a?.kind as Values['kind']) ?? 'technique',
   title: a?.title ?? '',
@@ -55,19 +58,27 @@ const toValues = (a?: Article): Values => ({
 
 export function Component() {
   const { id } = useParams();
+  const location = useLocation();
   const article = articlesCrud.useOne(id);
+  const draft = id ? undefined : (location.state as { draft?: ArticleDraft } | null)?.draft;
   if (id && article.isPending) return <PageLoader />;
   if (id && article.isError) return <ErrorState error={article.error} onRetry={() => void article.refetch()} />;
-  return <ArticleForm key={id ?? 'new'} article={article.data} />;
+  return <ArticleForm key={id ?? 'new'} article={article.data} draft={draft} />;
 }
 
-function ArticleForm({ article }: { article?: Article }) {
+function ArticleForm({ article, draft }: { article?: Article; draft?: ArticleDraft }) {
   const navigate = useNavigate();
   const save = articlesCrud.useSave();
   const generateImage = useGenerateImage();
   const [drafting, setDrafting] = useState(false);
   const [topic, setTopic] = useState('');
-  const form = useForm<Input, unknown, Values>({ resolver: zodResolver(schema), defaultValues: toValues(article) });
+  const [withPhoto, setWithPhoto] = useState(true);
+  // Visual brief written by the AI, reused when (re)generating the photo.
+  const [photoBrief, setPhotoBrief] = useState(draft?.photo_brief ?? '');
+  const form = useForm<Input, unknown, Values>({
+    resolver: zodResolver(schema),
+    defaultValues: { ...toValues(article), ...draft },
+  });
   const { register, control, setValue, getValues, formState } = form;
   const { errors, isDirty, isSubmitSuccessful, dirtyFields } = formState;
   useUnsavedChangesGuard(isDirty && !isSubmitSuccessful);
@@ -91,7 +102,14 @@ function ArticleForm({ article }: { article?: Article }) {
       setValue('difficulty', result.difficulty ?? '', { shouldDirty: true });
       setValue('reading_minutes', result.reading_minutes, { shouldDirty: true });
       setValue('tags', result.tags.join(', '), { shouldDirty: true });
+      setPhotoBrief(result.photo_brief);
       toast.success('Brouillon rédigé : relisez-le avant publication');
+      if (withPhoto && !getValues('image_url')) {
+        const url = await generateImage
+          .mutateAsync(articleImageRequest({ ...result, kind, photo_brief: result.photo_brief }))
+          .catch(() => null);
+        if (url) setValue('image_url', url, { shouldDirty: true });
+      }
     } catch (error) {
       toast.error(toUserMessage(error));
     } finally {
@@ -105,11 +123,7 @@ function ArticleForm({ article }: { article?: Article }) {
       form.setError('title', { message: 'Saisissez un titre avant de générer une image' });
       return;
     }
-    const url = await generateImage.mutateAsync({
-      title: values.title,
-      description: values.excerpt,
-      folder: 'articles',
-    });
+    const url = await generateImage.mutateAsync(articleImageRequest({ ...values, photo_brief: photoBrief }));
     setValue('image_url', url, { shouldDirty: true });
   };
 
@@ -154,10 +168,21 @@ function ArticleForm({ article }: { article?: Article }) {
               />
             )}
           </Field>
-          <Button variant="secondary" loading={drafting} onClick={() => void draftWithAi()}>
-            <Wand2 />
-            Rédiger
-          </Button>
+          <div className="flex flex-col gap-2">
+            <Checkbox
+              label="Créer aussi la photo"
+              checked={withPhoto}
+              onChange={(e) => setWithPhoto(e.target.checked)}
+            />
+            <Button
+              variant="secondary"
+              loading={drafting || generateImage.isPending}
+              onClick={() => void draftWithAi()}
+            >
+              <Wand2 />
+              {generateImage.isPending && drafting ? 'Création de la photo…' : 'Rédiger'}
+            </Button>
+          </div>
         </Card>
       )}
 
@@ -238,6 +263,13 @@ function ArticleForm({ article }: { article?: Article }) {
                 onChange={(url) => setValue('image_url', url, { shouldDirty: true, shouldValidate: true })}
                 error={errors.image_url?.message}
               />
+              {!image && (
+                <p className="flex items-start gap-2 rounded-lg bg-warning-50 p-3 text-sm text-warning-800">
+                  <ImageOff className="mt-0.5 size-4 shrink-0" aria-hidden />
+                  Sans photo, l&apos;article s&apos;affiche avec un visuel générique sur le site. Importez une photo ou
+                  cliquez sur « Générer par IA ».
+                </p>
+              )}
               <Field label="Vidéo (YouTube ou Vimeo)" error={errors.video_url?.message}>
                 {(c) => (
                   <Input {...c} type="url" placeholder="https://www.youtube.com/watch?v=…" {...register('video_url')} />

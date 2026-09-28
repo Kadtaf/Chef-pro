@@ -4,6 +4,7 @@ import {
   aiSchemas,
   type AiGenerateRequest,
   type AiGenerationType,
+  type AiArticle,
   type AiSuggestions,
 } from '@ai-contract';
 import {
@@ -37,6 +38,7 @@ import { useState } from 'react';
 import { useNavigate } from 'react-router';
 import { toast } from 'sonner';
 import { ARTICLE_KINDS, type ArticleKind } from '@/features/articles/api';
+import type { ArticleDraft } from '@/features/articles/article-edit-page';
 import { DocumentPreview } from '@/features/export/document-preview';
 import { renderPdf } from '@/features/export/pdf-document';
 import { recipeFromAi } from '@/features/recipes/schema';
@@ -276,6 +278,22 @@ export function Component() {
       void navigate('/admin/recipes/new', { state: { draft: recipeFromAi(g.result as never, g.imageUrl, terms) } });
     if (g.type === 'technical_sheet')
       void navigate('/admin/technical-sheets/new', { state: { draft: sheetFromAi(g.result as never, g.imageUrl) } });
+    if (g.type === 'article') {
+      const a = g.result as AiArticle;
+      const draft: ArticleDraft = {
+        kind: g.articleKind,
+        title: a.title,
+        slug: slugify(a.title),
+        excerpt: a.excerpt,
+        body: a.body,
+        difficulty: a.difficulty ?? '',
+        reading_minutes: a.reading_minutes,
+        tags: a.tags.join(', '),
+        image_url: g.imageUrl ?? '',
+        photo_brief: a.photo_brief,
+      };
+      void navigate('/admin/articles/new', { state: { draft } });
+    }
   };
 
   /** Develops an idea into a full recipe, keeping its season, type and style. */
@@ -668,7 +686,9 @@ export function Component() {
                     <Save />
                     Enregistrer en brouillon
                   </Button>
-                  {(generated.type === 'recipe' || generated.type === 'technical_sheet') && (
+                  {(generated.type === 'recipe' ||
+                    generated.type === 'technical_sheet' ||
+                    generated.type === 'article') && (
                     <Button variant="subtle" onClick={() => openInEditor(generated)}>
                       <Pencil />
                       Ajuster dans l&apos;éditeur

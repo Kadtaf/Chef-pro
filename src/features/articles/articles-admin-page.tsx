@@ -1,14 +1,18 @@
-import { BookOpen, Eye, EyeOff, Pencil, Plus, Trash2 } from 'lucide-react';
+import { BookOpen, Eye, EyeOff, ImageOff, ImagePlus, Pencil, Plus, Trash2 } from 'lucide-react';
 import { useState } from 'react';
 import { Link } from 'react-router';
+import { toast } from 'sonner';
+import { generateImage } from '@/features/ai-studio/api';
 import { cn } from '@/shared/lib/cn';
+import { toUserMessage } from '@/shared/lib/errors';
 import { formatShortDate } from '@/shared/lib/format';
+import { imageUrl } from '@/shared/lib/storage';
 import { Button } from '@/shared/ui/button';
 import { useConfirm } from '@/shared/ui/confirm-context';
 import { Badge, EmptyState, ErrorState, PageLoader } from '@/shared/ui/feedback';
 import { PageHeader } from '@/shared/ui/layout';
 import { Table, Td, Th, Tr } from '@/shared/ui/table';
-import { ARTICLE_KINDS, articlesCrud, type ArticleKind } from './api';
+import { ARTICLE_KINDS, articleImageRequest, articlesCrud, type ArticleKind } from './api';
 
 export function Component() {
   const { data: articles = [], isPending, isError, error, refetch } = articlesCrud.useList();
@@ -17,6 +21,35 @@ export function Component() {
   const confirm = useConfirm();
   const [kind, setKind] = useState<ArticleKind | 'all'>('all');
   const visible = articles.filter((a) => kind === 'all' || a.kind === kind);
+  const withoutPhoto = visible.filter((a) => !a.image_url);
+  const [progress, setProgress] = useState<{ done: number; total: number } | null>(null);
+
+  /** Generates the missing photos one by one (each counts in the daily AI quota). */
+  const generateMissingPhotos = async () => {
+    const targets = withoutPhoto;
+    const ok = await confirm({
+      title: `Générer ${targets.length} photo${targets.length > 1 ? 's' : ''} ?`,
+      description:
+        'Une photo réaliste est créée par IA pour chaque article sans photo. Chaque photo compte dans le quota IA quotidien ; vous pourrez la remplacer dans l’article.',
+      confirmLabel: 'Générer',
+      tone: 'primary',
+    });
+    if (!ok) return;
+    let done = 0;
+    setProgress({ done, total: targets.length });
+    try {
+      for (const article of targets) {
+        const url = await generateImage(articleImageRequest(article));
+        await patch.mutateAsync({ id: article.id, values: { image_url: url } });
+        setProgress({ done: ++done, total: targets.length });
+      }
+      toast.success(`${done} photo${done > 1 ? 's' : ''} ajoutée${done > 1 ? 's' : ''}`);
+    } catch (error) {
+      toast.error(`${done} photo(s) ajoutée(s), puis arrêt : ${toUserMessage(error)}`);
+    } finally {
+      setProgress(null);
+    }
+  };
 
   return (
     <div className="animate-fade-in space-y-6">
@@ -24,12 +57,22 @@ export function Component() {
         title="Techniques & conseils"
         description="Articles des pages « Techniques culinaires » et « Conseils du Chef »"
         actions={
-          <Button asChild>
-            <Link to="/admin/articles/new">
-              <Plus />
-              Nouvel article
-            </Link>
-          </Button>
+          <>
+            {withoutPhoto.length > 0 && (
+              <Button variant="subtle" loading={!!progress} onClick={() => void generateMissingPhotos()}>
+                <ImagePlus />
+                {progress
+                  ? `Photos ${progress.done}/${progress.total}…`
+                  : `Générer les photos manquantes (${withoutPhoto.length})`}
+              </Button>
+            )}
+            <Button asChild>
+              <Link to="/admin/articles/new">
+                <Plus />
+                Nouvel article
+              </Link>
+            </Button>
+          </>
         }
       />
 
@@ -63,6 +106,9 @@ export function Component() {
         <Table>
           <thead>
             <tr>
+              <Th className="w-20">
+                <span className="sr-only">Photo</span>
+              </Th>
               <Th>Titre</Th>
               <Th className="hidden md:table-cell">Rubrique</Th>
               <Th className="hidden md:table-cell">Mis à jour</Th>
@@ -75,6 +121,23 @@ export function Component() {
           <tbody>
             {visible.map((article) => (
               <Tr key={article.id}>
+                <Td>
+                  {article.image_url ? (
+                    <img
+                      src={imageUrl(article.image_url, 160)}
+                      alt=""
+                      loading="lazy"
+                      className="size-12 rounded-lg object-cover"
+                    />
+                  ) : (
+                    <span
+                      className="flex size-12 items-center justify-center rounded-lg bg-neutral-100 text-neutral-400"
+                      title="Sans photo"
+                    >
+                      <ImageOff className="size-5" aria-label="Sans photo" />
+                    </span>
+                  )}
+                </Td>
                 <Td>
                   <Link to={`/admin/articles/${article.id}/edit`} className="font-medium hover:text-primary-700">
                     {article.title}

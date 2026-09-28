@@ -69,8 +69,13 @@ npm run functions:deploy
 | ----------------------------------------------- | ----------- | --------------------------------------------------------------------- |
 | `GEMINI_API_KEY`                                | oui         | Studio IA : recettes, fiches, menus, cartes, articles (Google Gemini) |
 | `GEMINI_MODEL`                                  | non         | Modèle Gemini (défaut `gemini-flash-latest`)                          |
-| `GEMINI_FALLBACK_MODEL`                         | non         | Modèle de secours si surcharge (défaut `gemini-flash-lite-latest`)    |
-| `STABILITY_API_KEY`                             | oui         | Photos culinaires réalistes (Stability AI, Stable Image Core)         |
+| `GEMINI_FALLBACK_MODEL`                         | non         | Modèle Gemini léger si surcharge (défaut `gemini-flash-lite-latest`)  |
+| `GROQ_API_KEY`                                  | recommandé  | Texte : secours n°1 si Gemini est indisponible (Groq, Llama 3.3 70B)  |
+| `TEXT_PROVIDERS`                                | non         | Ordre des IA de rédaction (défaut `gemini,groq,cloudflare`)           |
+| `STABILITY_API_KEY`                             | recommandé  | Photos : service principal (Stability AI, Stable Image Core, WebP)    |
+| `CLOUDFLARE_ACCOUNT_ID`, `CLOUDFLARE_API_TOKEN` | recommandé  | Photos : secours n°1, Cloudflare Workers AI FLUX (quota quotidien)    |
+| `HUGGINGFACE_API_TOKEN`                         | non         | Photos : secours n°2, Hugging Face FLUX (crédits mensuels)            |
+| `IMAGE_PROVIDERS`                               | non         | Ordre des services photo (défaut `stability,cloudflare,huggingface`)  |
 | `ALLOWED_ORIGINS`                               | oui         | Domaines autorisés (CORS), séparés par des virgules                   |
 | `AI_DAILY_LIMIT`                                | non (50)    | Quota de générations IA par administrateur et par 24 h                |
 | `PUBLIC_SUBMIT_LIMIT_PER_HOUR`                  | non (5)     | Limite des formulaires publics par IP                                 |
@@ -82,7 +87,7 @@ npm run functions:deploy
 
 `SUPABASE_URL` et `SUPABASE_SERVICE_ROLE_KEY` sont fournis automatiquement par la plateforme.
 
-**Brevo (double opt-in)** : créez une liste, puis un modèle transactionnel de type « Double opt-in » contenant le lien `{{ params.DOIurl }}` ; renseignez son identifiant dans `BREVO_DOI_TEMPLATE_ID`. Le contact n'est ajouté à la liste qu'après avoir cliqué sur ce lien.
+**Brevo (double opt-in)** : créez une liste, puis un modèle transactionnel de type « Double opt-in » avec le tag `optin` et contenant le lien de confirmation `{{ doubleoptin }}` ; renseignez son identifiant dans `BREVO_DOI_TEMPLATE_ID`. Le contact n'est ajouté à la liste qu'après avoir cliqué sur ce lien.
 
 Les fonctions `engage` et `newsletter` sont publiques (`verify_jwt = false`) : elles valident chaque requête, limitent le débit et n'écrivent qu'à travers des RPC dédiées.
 

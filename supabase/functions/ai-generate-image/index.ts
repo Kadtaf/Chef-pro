@@ -1,11 +1,11 @@
 import { aiImageRequestSchema, type AiImageRequest } from '../_shared/ai-schemas.ts';
 import { handler, json } from '../_shared/http.ts';
-import { generateImage, IMAGE_MODEL, stabilityKey, type AspectRatio } from '../_shared/stability.ts';
+import { EXTENSIONS, generateImage, type AspectRatio } from '../_shared/image-provider.ts';
 import { enforceAiQuota, logGeneration, requireAdmin } from '../_shared/supabase.ts';
 
 const BUCKET = 'ai-images';
 
-/** Stable Image models understand English best; French dish names are kept as-is. */
+/** Image models understand English best; French dish names are kept as-is. */
 const AMBIANCES: Record<NonNullable<AiImageRequest['ambiance']>, string> = {
   editorial:
     'high-end editorial food photography for a gastronomy magazine, soft natural window light, refined porcelain plate, linen napkin, shallow depth of field',
@@ -80,19 +80,19 @@ Deno.serve(
   handler(async (req, body) => {
     const { user, admin } = await requireAdmin(req);
     const request = aiImageRequestSchema.parse(body);
-    const apiKey = stabilityKey();
     await enforceAiQuota(admin, user.id);
 
     const prompt = buildPrompt(request);
-    const bytes = await generateImage(apiKey, {
+    // Stability first, then free fallbacks (see _shared/image-provider.ts).
+    const image = await generateImage({
       prompt,
       negativePrompt: NEGATIVE_PROMPT + (DISH_FOLDERS.has(request.folder) ? DISH_NEGATIVE : ''),
       aspectRatio: request.aspect_ratio ?? DEFAULT_RATIO[request.folder],
     });
 
-    const path = `${request.folder}/${slugify(request.title)}-${crypto.randomUUID()}.webp`;
-    const { error } = await admin.storage.from(BUCKET).upload(path, bytes, {
-      contentType: 'image/webp',
+    const path = `${request.folder}/${slugify(request.title)}-${crypto.randomUUID()}.${EXTENSIONS[image.contentType]}`;
+    const { error } = await admin.storage.from(BUCKET).upload(path, image.bytes, {
+      contentType: image.contentType,
       cacheControl: '31536000',
       upsert: false,
     });
@@ -106,11 +106,11 @@ Deno.serve(
       userId: user.id,
       type: 'image',
       prompt,
-      result: { path, publicUrl },
-      model: IMAGE_MODEL,
+      result: { path, publicUrl, provider: image.provider },
+      model: image.model,
       status: 'success',
     });
 
-    return json(req, { url: publicUrl, path });
+    return json(req, { url: publicUrl, path, provider: image.provider });
   }),
 );

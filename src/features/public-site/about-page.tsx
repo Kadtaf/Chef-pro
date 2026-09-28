@@ -20,6 +20,7 @@ import { ErrorState, PageLoader } from '@/shared/ui/feedback';
 import { Reveal } from '@/shared/ui/reveal';
 import { Seo } from '@/shared/ui/seo';
 import { Container, CtaBanner, SectionHeading } from './components/sections';
+import { CHEF_PLACEHOLDER_ABOUT } from './images';
 
 const SAVOIR_FAIRE = [
   {
@@ -54,8 +55,18 @@ const SAVOIR_FAIRE = [
   },
 ];
 
+/**
+ * Illustration photos (Pexels, free licence) for experiences without their own
+ * photo. Deliberately generic — no faces, no identifiable venue — and labelled
+ * as illustrations so they are never taken for the actual establishment.
+ */
+const ILLUSTRATIONS = [3298637, 3338497, 6210876, 1487511, 2097090, 1435904].map(
+  (id) => `https://images.pexels.com/photos/${id}/pexels-photo-${id}.jpeg?auto=compress&cs=tinysrgb&w=1200`,
+);
+
 function ExperienceCard({ experience, index }: { experience: CareerExperience; index: number }) {
   const reversed = index % 2 === 1;
+  const illustration = ILLUSTRATIONS[index % ILLUSTRATIONS.length]!;
   const chips = (items: string[], tone: 'gold' | 'neutral' | 'bordeaux') =>
     items.length > 0 && (
       <ul className="flex flex-wrap gap-1.5">
@@ -82,12 +93,24 @@ function ExperienceCard({ experience, index }: { experience: CareerExperience; i
       >
         <div className="relative aspect-4/3 overflow-hidden rounded-3xl bg-neutral-900">
           {experience.image_url ? (
-            <img src={imageUrl(experience.image_url, 960)} alt="" className="size-full object-cover" loading="lazy" />
+            <img
+              src={imageUrl(experience.image_url, 960)}
+              alt={`${experience.establishment}${experience.city ? `, ${experience.city}` : ''}`}
+              className="size-full object-cover"
+              loading="lazy"
+            />
           ) : (
-            <div className="flex size-full flex-col items-center justify-center gap-4 bg-linear-to-br from-primary-900 via-neutral-950 to-neutral-900 text-secondary-300">
-              <ToqueIcon size={64} />
-              <span className="font-display text-2xl text-cream-50/80">{experience.establishment}</span>
-            </div>
+            <>
+              <img src={illustration} alt="" className="size-full object-cover" loading="lazy" />
+              <div className="absolute inset-0 bg-linear-to-t from-neutral-950/70 via-transparent to-transparent" />
+              <span className="absolute bottom-5 left-5 flex items-center gap-2 font-display text-2xl text-cream-50">
+                <ToqueIcon size={28} className="text-secondary-300" />
+                {experience.establishment}
+              </span>
+              <span className="absolute right-4 bottom-4 text-[0.65rem] tracking-wider text-cream-50/60 uppercase">
+                Photo d&apos;illustration
+              </span>
+            </>
           )}
           <span className="absolute top-5 left-5 rounded-full bg-cream-50/95 px-4 py-1.5 font-display text-lg text-neutral-900 backdrop-blur">
             {careerPeriod(experience)}
@@ -212,9 +235,16 @@ export function Component() {
                   fetchPriority="high"
                 />
               ) : (
-                <div className="flex size-full items-center justify-center bg-linear-to-br from-primary-900 to-neutral-950 text-secondary-300">
-                  <ToqueIcon size={120} />
-                </div>
+                <>
+                  <img
+                    src={CHEF_PLACEHOLDER_ABOUT}
+                    alt="Mains du chef ajoutant des herbes dans une poêle"
+                    className="size-full object-cover"
+                    fetchPriority="high"
+                  />
+                  <div className="absolute inset-0 bg-linear-to-t from-neutral-950/60 via-transparent to-transparent" />
+                  <ToqueIcon size={36} className="absolute bottom-6 left-6 text-secondary-300" aria-hidden />
+                </>
               )}
             </div>
           </div>
